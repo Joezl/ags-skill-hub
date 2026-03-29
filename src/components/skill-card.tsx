@@ -5,7 +5,7 @@ import { Skill } from '@/types/skill';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Download, Star, Copy, Check, ExternalLink } from 'lucide-react';
+import { Eye, Star, Copy, Check, ExternalLink } from 'lucide-react';
 
 interface SkillCardProps {
   skill: Skill;
@@ -58,6 +58,9 @@ export function SkillCard({ skill }: SkillCardProps) {
                 {skill.author.charAt(0).toUpperCase()}
               </span>
               <span className="text-xs text-[hsl(210,8%,45%)] truncate">{skill.author}</span>
+              {skill.access ? (
+                <span className="text-[11px] uppercase tracking-wide text-[hsl(210,8%,45%)]">{skill.access}</span>
+              ) : null}
             </div>
           </div>
           <Badge variant="secondary" className="shrink-0 text-[11px]">
@@ -86,11 +89,11 @@ export function SkillCard({ skill }: SkillCardProps) {
       <CardFooter className="mt-auto">
         <div className="flex items-center justify-between w-full mb-3">
           <div className="flex items-center gap-3 text-xs text-[hsl(210,8%,45%)]">
-            <span className="flex items-center gap-1" title="Downloads">
-              <Download className="w-3.5 h-3.5" />
+            <span className="flex items-center gap-1" title="Views">
+              <Eye className="w-3.5 h-3.5" />
               <span className="font-medium">{formatNumber(skill.downloads)}</span>
             </span>
-            <span className="flex items-center gap-1" title="Stars">
+            <span className="flex items-center gap-1" title="Ratings">
               <Star className="w-3.5 h-3.5" />
               <span className="font-medium">{formatNumber(skill.stars)}</span>
             </span>

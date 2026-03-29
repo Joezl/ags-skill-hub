@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SkillHub - Discover Amazing Agent Skills",
-  description: "Browse, discover, and install community-built skills to supercharge your AI agents. One-click installation, endless possibilities.",
+  title: "SkillHub - Live ArcGIS Agent Skills",
+  description: "Browse live Agent Skill items from ArcGIS Online, inspect their metadata, and copy installation guidance for your editor or agent.",
 };
 
 export default function RootLayout({

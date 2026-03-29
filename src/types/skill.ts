@@ -11,7 +11,16 @@ export interface Skill {
   stars: number;
   updatedAt: string;
   tags: string[];
+  access?: AccessLevel;
+  averageRating?: number;
+  portalUrl?: string;
+  snippet?: string;
+  thumbnailUrl?: string;
+  type?: string;
+  typeKeywords?: string[];
 }
+
+export type AccessLevel = 'private' | 'shared' | 'org' | 'public';
 
 export type SortOption = 'downloads' | 'updatedAt' | 'name' | 'stars';
 

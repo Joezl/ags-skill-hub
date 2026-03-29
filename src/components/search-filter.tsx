@@ -44,8 +44,8 @@ export function SearchFilter({
             value={sortBy} 
             onChange={(e) => onSortChange(e.target.value as SortOption)}
           >
-            <SelectItem value="downloads">Most Downloads</SelectItem>
-            <SelectItem value="stars">Most Stars</SelectItem>
+            <SelectItem value="downloads">Most Viewed</SelectItem>
+            <SelectItem value="stars">Most Rated</SelectItem>
             <SelectItem value="updatedAt">Recently Updated</SelectItem>
             <SelectItem value="name">Name (A-Z)</SelectItem>
           </Select>
