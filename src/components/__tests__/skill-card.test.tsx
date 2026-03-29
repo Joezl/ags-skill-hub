@@ -67,7 +67,7 @@ describe('SkillCard', () => {
   it('should have link to install URL', () => {
     render(<SkillCard skill={mockSkill} />);
     
-    const link = screen.getByRole('link');
+    const link = screen.getByRole('link', { name: /open item/i });
     expect(link).toHaveAttribute('href', 'https://example.com/test');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');

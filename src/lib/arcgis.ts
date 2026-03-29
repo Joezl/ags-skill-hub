@@ -59,6 +59,10 @@ export function inferSkillCategory(item: Pick<ArcGISSearchItem, 'description' | 
     .join(' ')
     .toLowerCase();
 
+  if (containsAny(haystack, ['devops', 'deployment', 'infrastructure', 'ci/cd', 'pipeline', 'operations'])) {
+    return 'DevOps';
+  }
+
   if (containsAny(haystack, ['meeting', 'notes', 'productivity', 'schedule', 'task'])) {
     return 'Productivity';
   }

@@ -1,11 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { ArrowRight, Code2, Sparkles, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Database, Globe2, ShieldAlert, Sparkles, TriangleAlert } from 'lucide-react';
 import { Header } from '@/components/header';
 import { SearchFilter } from '@/components/search-filter';
 import { SkillCard } from '@/components/skill-card';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { Category, Skill, SortOption } from '@/types/skill';
 
 interface SkillHubClientProps {
@@ -16,7 +19,7 @@ interface SkillHubClientProps {
 export function SkillHubClient({ errorMessage, skills }: SkillHubClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
-  const [sortBy, setSortBy] = useState<SortOption>('downloads');
+  const [sortBy, setSortBy] = useState<SortOption>('updatedAt');
 
   const filteredSkills = useMemo(() => {
     let result = [...skills];
@@ -55,126 +58,164 @@ export function SkillHubClient({ errorMessage, skills }: SkillHubClientProps) {
 
   const totalDownloads = skills.reduce((accumulator, skill) => accumulator + skill.downloads, 0);
   const activeCategoryCount = new Set(skills.map((skill) => skill.category)).size;
+  const accessibleSkills = skills.filter((skill) => skill.access === 'public' || skill.access === 'org').length;
 
   return (
-    <div className="min-h-screen bg-[hsl(210,20%,98%)]">
+    <div className="min-h-screen bg-transparent">
       <Header />
 
-      <section className="bg-white border-b border-[hsl(210,16%,90%)]">
-        <div className="container max-w-7xl mx-auto px-4 py-12 md:py-16">
-          <div className="flex flex-col items-center text-center max-w-2xl mx-auto">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[hsl(210,100%,96%)] text-[hsl(210,100%,38%)] text-xs font-semibold mb-4">
-              <Sparkles className="w-3.5 h-3.5" />
-              Live ArcGIS Agent Skills
-            </div>
-
-            <h1 className="text-3xl md:text-4xl font-semibold text-[hsl(0,0%,14%)] tracking-tight">
-              Discover Skills from ArcGIS Online
-            </h1>
-
-            <p className="text-base text-[hsl(210,8%,45%)] mt-4 max-w-lg leading-relaxed">
-              Browse the latest Agent Skill items from your ArcGIS Online organization, inspect their metadata,
-              and copy a ready-to-use installation prompt for your editor or agent.
-            </p>
-
-            <div className="flex items-center gap-2 mt-6">
-              <Button className="gap-1.5">
-                <Code2 className="w-4 h-4" />
-                Browse Skills
-              </Button>
-              <Button variant="outline" className="gap-1.5">
-                View Source Items
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-8 mt-10 pt-8 border-t border-[hsl(210,16%,90%)] w-full justify-center">
-              <div className="text-center">
-                <div className="text-2xl font-semibold text-[hsl(0,0%,14%)]">{skills.length}</div>
-                <div className="text-xs text-[hsl(210,8%,45%)] mt-0.5">Skills</div>
-              </div>
-              <div className="w-px h-10 bg-[hsl(210,16%,90%)]" />
-              <div className="text-center">
-                <div className="text-2xl font-semibold text-[hsl(0,0%,14%)]">{(totalDownloads / 1000).toFixed(0)}k</div>
-                <div className="text-xs text-[hsl(210,8%,45%)] mt-0.5">Views</div>
-              </div>
-              <div className="w-px h-10 bg-[hsl(210,16%,90%)]" />
-              <div className="text-center">
-                <div className="text-2xl font-semibold text-[hsl(0,0%,14%)]">{activeCategoryCount}</div>
-                <div className="text-xs text-[hsl(210,8%,45%)] mt-0.5">Categories</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="container max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-white rounded border border-[hsl(210,16%,90%)] p-4 md:p-6">
-          {errorMessage ? (
-            <div className="flex items-start gap-3 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />
-              <div>
-                <div className="font-semibold">Live ArcGIS items could not be loaded.</div>
-                <div className="mt-1">{errorMessage}</div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className={errorMessage ? 'mt-4' : ''}>
-            <SearchFilter
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              selectedCategory={selectedCategory}
-              onCategoryChange={setSelectedCategory}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              resultCount={filteredSkills.length}
-            />
+      <main className="flex-1">
+        <section className="relative overflow-hidden border-b border-[hsl(210,24%,80%)] bg-[linear-gradient(180deg,hsl(210_78%_90%),hsl(206_72%_88%)_58%,hsl(210_44%_93%))]">
+          <div className="absolute inset-0">
+            <div className="absolute inset-x-0 top-0 h-px bg-white/65" />
+            <div className="absolute -left-24 top-0 h-64 w-64 rounded-full bg-[hsl(210,100%,38%)]/14 blur-3xl" />
+            <div className="absolute right-0 top-8 h-72 w-72 rounded-full bg-[hsl(199,100%,43%)]/12 blur-3xl" />
           </div>
 
-          {filteredSkills.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-6">
-              {filteredSkills.map((skill) => (
-                <SkillCard key={skill.id} skill={skill} />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-12 h-12 rounded-full bg-[hsl(210,20%,96%)] flex items-center justify-center mb-3">
-                <Code2 className="w-6 h-6 text-[hsl(210,8%,45%)]" />
+          <div className="container relative max-w-7xl mx-auto px-4 py-6 md:py-8">
+            <div className="max-w-3xl rounded-[1.25rem] border border-[hsl(210,34%,74%)] bg-[linear-gradient(180deg,hsl(0_0%_100%/0.4),hsl(210_40%_95%/0.58))] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-md md:px-6 md:py-6">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(210,10%,42%)]">
+                ArcGIS platform
               </div>
-              <h3 className="text-sm font-semibold text-[hsl(0,0%,14%)] mb-1">
-                {errorMessage ? 'No live skills available' : 'No skills found'}
-              </h3>
-              <p className="text-sm text-[hsl(210,8%,45%)] max-w-md">
-                {errorMessage
-                  ? 'Check the local ArcGIS environment configuration and refresh the page when the token or query is ready.'
-                  : 'Try adjusting your search or filter to find what you are looking for.'}
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  Live from ArcGIS Online
+                </Badge>
+                <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                  Location intelligence workflows
+                </Badge>
+              </div>
+
+              <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-[hsl(0,0%,14%)] md:text-5xl">
+                Bring ArcGIS skills into agentic location intelligence workflows.
+              </h1>
+
+              <p className="mt-2.5 max-w-2xl text-lg leading-8 text-[hsl(210,8%,36%)]">
+                Discover live skill items from ArcGIS Online and review how they support automation, content, and platform workflows.
               </p>
-            </div>
-          )}
-        </div>
-      </section>
 
-      <footer className="bg-white border-t border-[hsl(210,16%,90%)] mt-auto">
-        <div className="container max-w-7xl mx-auto px-4 py-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-6 h-6 rounded bg-[hsl(210,100%,38%)]">
-                <Code2 className="w-3.5 h-3.5 text-white" />
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-[hsl(210,8%,42%)]">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(210,16%,88%)] bg-white px-3 py-1.5">
+                  <ShieldAlert className="h-4 w-4 text-[hsl(24,95%,53%)]" />
+                  Some items require ArcGIS organization access.
+                </div>
               </div>
-              <span className="font-semibold text-sm">SkillHub</span>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <a href="#skills" className={cn(buttonVariants({ variant: 'default', size: 'default' }), 'h-10')}>
+                  Browse directory
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:max-w-2xl">
+                <div className="rounded-lg border border-[hsl(210,28%,78%)] bg-white/72 p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[hsl(210,10%,42%)]">Skills</div>
+                  <div className="mt-2 text-2xl font-semibold text-[hsl(0,0%,14%)]">{skills.length}</div>
+                </div>
+                <div className="rounded-lg border border-[hsl(210,28%,78%)] bg-white/72 p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[hsl(210,10%,42%)]">Categories</div>
+                  <div className="mt-2 text-2xl font-semibold text-[hsl(0,0%,14%)]">{activeCategoryCount}</div>
+                </div>
+                <div className="rounded-lg border border-[hsl(210,28%,78%)] bg-white/72 p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[hsl(210,10%,42%)]">Views</div>
+                  <div className="mt-2 text-2xl font-semibold text-[hsl(0,0%,14%)]">{(totalDownloads / 1000).toFixed(1)}k</div>
+                </div>
+              </div>
+
+              <div className="mt-2 inline-flex items-center gap-2 text-sm text-[hsl(210,8%,42%)]">
+                <Globe2 className="h-4 w-4 text-[hsl(210,100%,38%)]" />
+                {accessibleSkills} items are currently visible with public or organization access.
+              </div>
             </div>
-            <p className="text-xs text-[hsl(210,8%,45%)]">© 2026 SkillHub. Live from your ArcGIS Online organization.</p>
-            <div className="flex items-center gap-4 text-xs">
-              <a href="#" className="text-[hsl(210,8%,45%)] hover:text-[hsl(210,100%,38%)] transition-colors">
-                Privacy
-              </a>
-              <a href="#" className="text-[hsl(210,8%,45%)] hover:text-[hsl(210,100%,38%)] transition-colors">
-                Terms
-              </a>
-              <a href="#" className="text-[hsl(210,8%,45%)] hover:text-[hsl(210,100%,38%)] transition-colors">
-                Contact
+          </div>
+        </section>
+
+        <section id="skills" className="container max-w-7xl mx-auto px-4 py-4 md:py-5">
+          <div className="rounded-[1.25rem] border border-[hsl(210,18%,84%)] bg-[linear-gradient(180deg,hsl(210_24%_96.8%),hsl(210_22%_94.4%))] p-3 shadow-[0_18px_48px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.7)] md:p-4">
+            <div className="rounded-[1rem] border border-[hsl(210,16%,87%)] bg-[linear-gradient(180deg,hsl(0_0%_100%),hsl(210_18%_98.2%))] p-4 shadow-[0_2px_6px_rgba(15,23,42,0.04)] md:p-6">
+            {errorMessage ? (
+              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-semibold">Live ArcGIS items could not be loaded.</div>
+                  <div className="mt-1">{errorMessage}</div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className={errorMessage ? 'mt-3' : ''}>
+              <SearchFilter
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                selectedCategory={selectedCategory}
+                onCategoryChange={setSelectedCategory}
+                onResetFilters={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('All');
+                }}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+                resultCount={filteredSkills.length}
+              />
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-[hsl(210,16%,92%)] pt-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(210,10%,42%)]">
+                  Available skills
+                </div>
+                <div className="mt-1 text-sm text-[hsl(210,8%,42%)]">
+                  Review live items sourced from ArcGIS Online.
+                </div>
+              </div>
+            </div>
+
+            {filteredSkills.length > 0 ? (
+              <div className="mt-3 rounded-[1rem] border border-[hsl(210,18%,88%)] bg-[linear-gradient(180deg,hsl(210_22%_97.5%),hsl(210_22%_95.6%))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] md:p-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {filteredSkills.map((skill) => (
+                    <SkillCard key={skill.id} skill={skill} />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(210,20%,96%)]">
+                  <Database className="h-6 w-6 text-[hsl(210,8%,45%)]" />
+                </div>
+                <h3 className="mb-1 text-base font-semibold text-[hsl(0,0%,14%)]">
+                  {errorMessage ? 'No live skills available' : 'No skills matched this view'}
+                </h3>
+                <p className="max-w-md text-sm text-[hsl(210,8%,45%)]">
+                  {errorMessage
+                    ? 'Check the ArcGIS token and query configuration, then refresh when the live directory is available.'
+                    : 'Try broadening the search query or switching to another category to inspect more ArcGIS skill items.'}
+                </p>
+              </div>
+            )}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="mt-auto border-t border-[hsl(210,16%,90%)] bg-white/80">
+        <div className="container max-w-7xl mx-auto px-4 py-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-[hsl(0,0%,14%)]">Skill Hub</div>
+              <div className="mt-1 text-sm text-[hsl(210,8%,45%)]">
+                ArcGIS ecosystem directory for skills discovery and distribution.
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-[hsl(210,8%,45%)]">
+              <Link href="/api/skills" className="hover:text-[hsl(210,100%,38%)] transition-colors">
+                Developer API
+              </Link>
+              <a href="#skills" className="hover:text-[hsl(210,100%,38%)] transition-colors">
+                Browse skills
               </a>
             </div>
           </div>

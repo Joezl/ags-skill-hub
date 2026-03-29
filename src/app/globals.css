@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  /* Calcite Design System Color Palette */
   --calcite-blue: 210 100% 38%;
   --calcite-blue-hover: 210 100% 33%;
   --calcite-blue-press: 210 100% 28%;
+  --calcite-orange: 24 95% 53%;
   
   --background: 0 0% 100%;
   --foreground: 0 0% 14%;
@@ -13,33 +13,29 @@
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 14%;
   
-  /* Primary - Calcite Blue */
   --primary: var(--calcite-blue);
   --primary-foreground: 0 0% 100%;
   --primary-hover: var(--calcite-blue-hover);
   --primary-press: var(--calcite-blue-press);
   
-  /* Neutral Scale */
-  --secondary: 210 20% 96%;
+  --secondary: 210 24% 96%;
   --secondary-foreground: 0 0% 14%;
-  --muted: 210 14% 96%;
-  --muted-foreground: 210 8% 45%;
-  --accent: 210 20% 96%;
+  --muted: 210 20% 96%;
+  --muted-foreground: 210 10% 40%;
+  --accent: 24 100% 97%;
   --accent-foreground: 0 0% 14%;
   
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
   
-  /* Borders - Subtle */
   --border: 210 16% 90%;
   --input: 210 16% 90%;
   --ring: 210 100% 38%;
   
-  /* Calcite Radius - Subtle rounded corners */
-  --radius: 0.25rem;
-  --radius-sm: 0.125rem;
-  --radius-md: 0.25rem;
-  --radius-lg: 0.5rem;
+  --radius: 0.5rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
 }
 
 .dark {
@@ -96,25 +92,26 @@
 
 body {
   background-color: hsl(var(--background));
+  background-image:
+    linear-gradient(180deg, hsl(210 28% 98.5%), hsl(var(--background)) 22%),
+    radial-gradient(circle at top left, hsl(210 100% 97% / 0.65), transparent 24%);
   color: hsl(var(--foreground));
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
+  font-family: var(--font-body), "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-/* Calcite-style headings */
 h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display), var(--font-body), sans-serif;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
-/* Calcite focus states */
 *:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
 
-/* Custom scrollbar - Calcite style */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -133,9 +130,12 @@ h1, h2, h3, h4, h5, h6 {
   background: hsl(var(--muted-foreground) / 0.6);
 }
 
-/* Utility classes for Calcite spacing */
 .calcite-spacing-xs { padding: 0.25rem; }
 .calcite-spacing-sm { padding: 0.5rem; }
 .calcite-spacing-md { padding: 0.75rem; }
 .calcite-spacing-lg { padding: 1rem; }
 .calcite-spacing-xl { padding: 1.5rem; }
+
+::selection {
+  background: hsl(var(--primary) / 0.18);
+}

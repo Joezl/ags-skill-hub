@@ -259,6 +259,9 @@
 
 ## 10. 给下一个 Agent 的执行建议
 
+如果你接手的是首页视觉、交互和信息架构优化，请额外阅读：
+- `docs/UIUX_HANDOFF.md`
+
 如果你是接手这个项目的后续 agent，建议顺序如下：
 
 1. 先读 `src/lib/arcgis.ts`、`src/types/skill.ts`、`src/app/page.tsx`、`src/components/skill-hub-client.tsx`。
