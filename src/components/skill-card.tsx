@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Skill } from '@/types/skill';
+import { CATEGORIES } from '@/types/skill';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import {
 import { cn } from '@/lib/utils';
 
 interface SkillCardProps {
+  renderTimestamp?: number;
   skill: Skill;
 }
 
@@ -36,10 +38,16 @@ const categoryIconMap = {
   Communication: MessageSquare,
 } as const;
 
-export function SkillCard({ skill }: SkillCardProps) {
+type SkillCategoryIconKey = Exclude<(typeof CATEGORIES)[number], 'All'>;
+
+function hasCategoryIcon(value: string): value is SkillCategoryIconKey {
+  return value in categoryIconMap;
+}
+
+export function SkillCard({ skill, renderTimestamp }: SkillCardProps) {
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const CategoryIcon = categoryIconMap[skill.category] ?? Sparkles;
+  const CategoryIcon = hasCategoryIcon(skill.category) ? categoryIconMap[skill.category] : Sparkles;
 
   const accessVariant =
     skill.access === 'public'
@@ -80,7 +88,7 @@ export function SkillCard({ skill }: SkillCardProps) {
 
   const formatDate = (dateStr: string): string => {
     const date = new Date(dateStr);
-    const now = new Date();
+    const now = new Date(renderTimestamp ?? Date.now());
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) return 'Today';
@@ -205,7 +213,7 @@ export function SkillCard({ skill }: SkillCardProps) {
           <div className="rounded-md border border-[hsl(145,60%,85%)] bg-[hsl(145,60%,97%)] px-3 py-2 text-sm text-[hsl(145,55%,24%)]" role="status" aria-live="polite">
             <div className="font-semibold">Install guidance copied</div>
             <div className="mt-0.5 text-[12px] leading-4.5 text-[hsl(145,45%,30%)]">
-              Includes the item link, access context, and setup prompt for an editor or agent.
+              Includes a machine-readable install block for a client or agent to trigger ArcGIS OAuth and local installation.
             </div>
           </div>
         ) : null}

@@ -31,7 +31,9 @@ describe('arcgis skill mapping', () => {
     expect(skill.stars).toBe(3);
     expect(skill.access).toBe('org');
     expect(skill.typeKeywords).toContain('Agent Skill');
-    expect(skill.installPrompt).toContain('Item ID: cc90bd067ddd4f24954f51bf67f7460b');
+    expect(skill.installPrompt).toContain('ARC_SKILL_INSTALL');
+    expect(skill.installPrompt).toContain('item_id=cc90bd067ddd4f24954f51bf67f7460b');
+    expect(skill.installPrompt).toContain('auth=oauth');
   });
 
   it('prefers snippet when the description looks like structured markdown', () => {
@@ -58,9 +60,10 @@ describe('arcgis skill mapping', () => {
       typeKeywords: ['Agent Skill', 'Code', 'Sample', 'Skill'],
     });
 
-    expect(prompt).toContain('Portal URL: https://www.arcgis.com');
-    expect(prompt).toContain('Access level: org');
-    expect(prompt).toContain('Prefer an existing ArcGIS session or OAuth browser login flow.');
+    expect(prompt).toContain('portal_url=https://www.arcgis.com');
+    expect(prompt).toContain('access_level=org');
+    expect(prompt).toContain('auth=oauth');
+    expect(prompt).toContain('open a browser OAuth login flow for the user');
   });
 
   it('infers a category from item content', () => {

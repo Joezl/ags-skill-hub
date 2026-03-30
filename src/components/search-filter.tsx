@@ -29,13 +29,7 @@ export function SearchFilter({
 }: SearchFilterProps) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(210,10%,42%)]">
-            Browse directory
-          </div>
-          <div className="mt-1 text-sm text-[hsl(210,8%,42%)]">Filter by category or refine with search.</div>
-        </div>
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-end">
         <div className="text-sm text-[hsl(210,8%,45%)]">
           Showing <span className="font-semibold text-[hsl(0,0%,14%)]">{resultCount}</span> skills
           {selectedCategory !== 'All' && (

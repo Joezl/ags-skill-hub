@@ -1,11 +1,16 @@
-'use client';
-
 import Link from 'next/link';
-import { Database, LayoutGrid, LogIn, Sparkles } from 'lucide-react';
+import { BadgeCheck, Database, LayoutGrid, LogIn, LogOut, Sparkles } from 'lucide-react';
+import type { ArcGISViewer } from '@/lib/arcgis-auth';
+import { APP_BASE_PATH } from '@/lib/app-config';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export function Header() {
+interface HeaderProps {
+  authConfigured?: boolean;
+  viewer?: ArcGISViewer | null;
+}
+
+export function Header({ authConfigured = true, viewer }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[hsl(210,16%,88%)] bg-white/96 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between max-w-7xl mx-auto px-4">
@@ -43,17 +48,48 @@ export function Header() {
             <Database className="w-3.5 h-3.5" />
             API
           </Link>
-          <button
-            type="button"
-            aria-disabled="true"
-            className={cn(
-              buttonVariants({ variant: 'outline', size: 'sm' }),
-              'border-[hsl(210,30%,74%)] bg-[linear-gradient(180deg,hsl(0_0%_100%),hsl(210_42%_97%))] px-3 text-[hsl(210,100%,38%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(15,23,42,0.04)] hover:border-[hsl(210,30%,70%)] hover:bg-[linear-gradient(180deg,hsl(0_0%_100%),hsl(210_42%_97%))] hover:text-[hsl(210,100%,38%)]'
-            )}
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            Sign in
-          </button>
+          {viewer ? (
+            <>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(210,18%,82%)] bg-[linear-gradient(180deg,hsl(210_38%_98%),hsl(210_30%_95%))] px-3 py-1.5 text-[12px] text-[hsl(210,10%,28%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+                <BadgeCheck className="h-3.5 w-3.5 text-[hsl(210,100%,38%)]" />
+                <span className="font-semibold">{viewer.fullName}</span>
+                <span className="text-[hsl(210,10%,42%)]">@{viewer.username}</span>
+              </div>
+              <a
+                href={`${APP_BASE_PATH}/api/auth/arcgis/logout`}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'border-[hsl(210,16%,82%)] text-[hsl(210,10%,28%)]'
+                )}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign out
+              </a>
+            </>
+          ) : authConfigured ? (
+            <a
+              href={`${APP_BASE_PATH}/api/auth/arcgis/login?returnTo=${encodeURIComponent(APP_BASE_PATH)}`}
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'sm' }),
+                'border-[hsl(210,30%,74%)] bg-[linear-gradient(180deg,hsl(0_0%_100%),hsl(210_42%_97%))] px-3 text-[hsl(210,100%,38%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(15,23,42,0.04)] hover:border-[hsl(210,30%,70%)] hover:bg-[linear-gradient(180deg,hsl(0_0%_100%),hsl(210_42%_97%))] hover:text-[hsl(210,100%,38%)]'
+              )}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Sign in with ArcGIS
+            </a>
+          ) : (
+            <span
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'sm' }),
+                'cursor-not-allowed border-[hsl(210,16%,84%)] text-[hsl(210,10%,48%)] opacity-70'
+              )}
+              aria-disabled="true"
+              title="Set ARCGIS_OAUTH_CLIENT_ID and SKILL_HUB_SESSION_SECRET to enable ArcGIS sign-in."
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Sign in unavailable
+            </span>
+          )}
         </nav>
       </div>
     </header>

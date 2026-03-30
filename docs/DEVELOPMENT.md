@@ -189,17 +189,24 @@ npm run dev
 # 构建
 npm run build
 
+# 生产启动
+npm run start
+
 # 测试
-npm test
+npm run test
+npm run test:run
 npm run test:ui      # Vitest UI
 npm run test:coverage # 覆盖率
 
 # 代码检查
 npm run lint
-npm run lint:fix
 
 # 类型检查
-npx tsc --noEmit
+npm run type-check
+
+# ArcGIS installer
+npm run login:arcgis
+npm run install:skill -- --item <arcgis-item-id> --portal https://www.arcgis.com
 ```
 
 ---
@@ -235,9 +242,35 @@ skill-hub/
 
 ```bash
 # .env.local
-NEXT_PUBLIC_API_URL=https://api.skillhub.example.com
-NEXT_PUBLIC_GA_ID=GA-XXXXXXXX
+ARCGIS_PORTAL_URL=https://www.arcgis.com
+ARCGIS_ORG_ID=<your-org-id>
+ARCGIS_MAX_ITEMS=100
+
+# Optional: override the ArcGIS search query completely
+ARCGIS_AGENT_SKILL_QUERY=orgid:<your-org-id> AND type:"Code Sample" AND typekeywords:"Agent Skill"
+
+# Web OAuth for the Skill Hub app
+ARCGIS_OAUTH_CLIENT_ID=<your-oauth-client-id>
+ARCGIS_OAUTH_CLIENT_SECRET=<optional-client-secret>
+SKILL_HUB_SESSION_SECRET=<random-long-secret>
+ARCGIS_OAUTH_REDIRECT_URI=http://localhost:3000/skill-hub/api/auth/arcgis/callback
+
+# Local installer behavior
+ARCGIS_OAUTH_CALLBACK_PORT=8976
+ARCGIS_INSTALL_ROOT=~/.skillhub/skills
 ```
+
+说明:
+
+- Web app 的回调地址必须在 ArcGIS OAuth app 中显式注册。
+- 如果未配置 `ARCGIS_OAUTH_REDIRECT_URI`，应用会基于当前 origin 自动生成 `/skill-hub/api/auth/arcgis/callback`。
+- `SKILL_HUB_SESSION_SECRET` 用于加密网页登录 session cookie，不应提交到仓库。
+- `ARCGIS_INSTALL_ROOT` 只影响本地 installer，不影响网页端 Skill Hub。
+- 推荐先复制 `.env.example` 到 `.env.local`，再填入本地实际值。
+
+## 7.1 环境模板
+
+仓库提供 `.env.example` 作为本地启动模板，避免遗漏 ArcGIS 查询、网页登录和 installer 所需变量。
 
 ---
 

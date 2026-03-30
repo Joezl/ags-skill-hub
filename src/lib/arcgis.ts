@@ -29,27 +29,34 @@ const DEFAULT_PORTAL_URL = 'https://www.arcgis.com';
 const DEFAULT_ITEM_QUERY = 'type:"Code Sample" AND typekeywords:"Agent Skill"';
 const DEFAULT_MAX_ITEMS = 100;
 
+interface ArcGISSkillQueryOptions {
+  accessToken?: string | null;
+  portalUrl?: string;
+}
+
 export function buildInstallPrompt(skill: Pick<Skill, 'access' | 'installUrl' | 'name' | 'portalUrl' | 'type' | 'typeKeywords'> & { id: string }): string {
+  const portalUrl = skill.portalUrl || DEFAULT_PORTAL_URL;
+  const itemType = skill.type || 'Code Sample';
   const typeKeywords = skill.typeKeywords?.join(', ') || 'Agent Skill';
+  const accessLevel = skill.access || 'org';
 
   return [
-    'Install this ArcGIS agent skill from ArcGIS Online.',
+    'ARC_SKILL_INSTALL',
+    `portal_url=${portalUrl}`,
+    `item_id=${skill.id}`,
+    `item_url=${skill.installUrl}`,
+    `item_title=${escapeInstallValue(skill.name)}`,
+    `item_type=${escapeInstallValue(itemType)}`,
+    `type_keywords=${escapeInstallValue(typeKeywords)}`,
+    `access_level=${accessLevel}`,
+    'auth=oauth',
+    'install_mode=agent_client_oauth',
+    'END_ARC_SKILL_INSTALL',
     '',
-    `Skill title: ${skill.name}`,
-    `Portal URL: ${skill.portalUrl || DEFAULT_PORTAL_URL}`,
-    `Item ID: ${skill.id}`,
-    `Item URL: ${skill.installUrl}`,
-    `Expected item type: ${skill.type || 'Code Sample'}`,
-    `Expected type keywords: ${typeKeywords}`,
-    `Access level: ${skill.access || 'org'}`,
-    '',
-    'Instructions:',
-    '1. Resolve this ArcGIS Online item and inspect its metadata and packaged item data.',
-    '2. If the item is not publicly accessible, ask the user to authenticate with ArcGIS Online.',
-    '3. Prefer an existing ArcGIS session or OAuth browser login flow.',
-    '4. If interactive login is unavailable, ask for a temporary access token instead of a raw password when possible.',
-    '5. Download the package and determine the correct installation steps from the packaged skill contents.',
-    '6. If the package cannot be accessed or parsed, explain the blocker and ask for the next safest step.',
+    'Install this ArcGIS skill using the client or agent runtime.',
+    'If ArcGIS Online authentication is required, open a browser OAuth login flow for the user.',
+    'After login succeeds, exchange the authorization result for a valid token, download the item package, inspect its contents, and install the skill locally.',
+    'Do not ask the user to paste a raw password into chat. Prefer the existing ArcGIS browser session, OAuth login, or a cached token handled by the client runtime.',
   ].join('\n');
 }
 
@@ -123,32 +130,34 @@ export function mapArcGISItemToSkill(item: ArcGISSearchItem, portalUrl = getPort
   return skill;
 }
 
-export async function getArcGISSkills(): Promise<Skill[]> {
+export async function getArcGISSkills(options: ArcGISSkillQueryOptions = {}): Promise<Skill[]> {
   const maxItems = getMaxItems();
-  const items = await searchArcGISItems(maxItems);
+  const portalUrl = normalizePortalUrl(options.portalUrl || getPortalUrl());
+  const items = await searchArcGISItems(maxItems, {
+    accessToken: options.accessToken || undefined,
+    portalUrl,
+  });
 
   return items
-    .map((item) => mapArcGISItemToSkill(item))
+    .map((item) => mapArcGISItemToSkill(item, portalUrl))
     .sort((left, right) => right.downloads - left.downloads);
 }
 
-async function searchArcGISItems(maxItems: number): Promise<ArcGISSearchItem[]> {
-  const token = getAccessToken();
+async function searchArcGISItems(maxItems: number, options: { accessToken?: string; portalUrl: string }): Promise<ArcGISSearchItem[]> {
   const query = getItemQuery();
-  const portalUrl = getPortalUrl();
   const results: ArcGISSearchItem[] = [];
   let nextStart = 1;
 
   while (nextStart !== -1 && results.length < maxItems) {
     const pageSize = Math.min(100, maxItems - results.length);
-    const search = await fetchArcGISJson<ArcGISSearchResponse>(`${portalUrl}/sharing/rest/search`, {
+    const search = await fetchArcGISJson<ArcGISSearchResponse>(`${options.portalUrl}/sharing/rest/search`, {
       f: 'pjson',
       num: String(pageSize),
       q: query,
       sortField: 'modified',
       sortOrder: 'desc',
       start: String(nextStart),
-      token,
+      ...(options.accessToken ? { token: options.accessToken } : {}),
     });
 
     results.push(...search.results);
@@ -201,18 +210,12 @@ function cleanText(value?: string | null): string {
     .trim();
 }
 
-function containsAny(haystack: string, needles: string[]): boolean {
-  return needles.some((needle) => haystack.includes(needle));
+function escapeInstallValue(value: string): string {
+  return value.replace(/\r?\n+/g, ' ').trim();
 }
 
-function getAccessToken(): string {
-  const token = process.env.ARCGIS_ACCESS_TOKEN?.trim();
-
-  if (!token) {
-    throw new Error('Missing ARCGIS_ACCESS_TOKEN in the local environment.');
-  }
-
-  return token;
+function containsAny(haystack: string, needles: string[]): boolean {
+  return needles.some((needle) => haystack.includes(needle));
 }
 
 function getItemQuery(): string {
@@ -243,6 +246,10 @@ function getMaxItems(): number {
 
 function getPortalUrl(): string {
   return (process.env.ARCGIS_PORTAL_URL || DEFAULT_PORTAL_URL).replace(/\/$/, '');
+}
+
+function normalizePortalUrl(value: string): string {
+  return value.replace(/\/$/, '');
 }
 
 function normalizeAccess(value?: string): AccessLevel {

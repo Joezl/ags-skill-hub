@@ -1,286 +1,318 @@
 # Skill Hub Handoff
 
-## 1. 当前状态
+## 1. Current Status
 
-截至 2026-03-29，Skill Hub 已完成从本地 mock 数据目录页到 ArcGIS Online 实时数据目录的第一轮迁移。
+As of 2026-03-30, Skill Hub is no longer a mock-data MVP. It is now a live ArcGIS-backed Next.js 16 app with:
 
-当前能力：
-- 首页会在服务端实时读取 ArcGIS Online 组织内的 Agent Skill items。
-- 前端仍保留本地搜索、分类筛选、排序交互。
-- 每张卡片已展示标题、描述、标签、最近更新时间，并将 `Views` 作为当前阶段的“下载量替代语义”。
-- 卡片支持复制安装提示文本，内容包含原始 ArcGIS item URL 和自然语言安装指引。
-- `npm run type-check`、`npm run test -- --run`、`npm run build` 均已通过。
+- Server-rendered live skill discovery from ArcGIS Online
+- ArcGIS web sign-in via OAuth authorization code flow
+- Encrypted HttpOnly session cookies for the Hub itself
+- Session refresh handling in `src/proxy.ts`
+- A working sign-out flow
+- Copyable `ARC_SKILL_INSTALL` blocks on skill cards
+- A local installer CLI that can parse descriptors, run ArcGIS OAuth, cache tokens, download item packages, and extract zip content
 
-当前这一版可以作为后续 UI/UX 精修、安装体验优化、OAuth 认证升级的基础版本继续推进。
+This is the baseline that should be continued. Do not treat the repo as a static-export mock site anymore.
 
-## 2. 已完成的关键决策
+## 2. What Was Completed In This Phase
 
-### 2.1 运行模式
+### 2.1 Live ArcGIS data
 
-项目不再使用 static export。
+- The app fetches real ArcGIS items instead of local mock skills for the main directory flow.
+- Search results come from ArcGIS REST search and are mapped in `src/lib/arcgis.ts`.
+- The home page fetches on the server and remains dynamic.
+- `GET /api/skills` is available as a session-aware dynamic API.
 
-原因：
-- 数据源是私有或组织内可见的 ArcGIS Online items。
-- 用户要求每次打开页面或刷新时都获取最新数据。
-- 访问 token 不能暴露到前端。
+### 2.2 Install flow upgrade
 
-因此当前方案改为：
-- 首页使用服务端动态渲染。
-- 通过 Next Route Handler 提供统一的 skills API。
-- 所有 ArcGIS 请求都在服务端发起，使用本地环境变量中的 token。
+- Skill cards no longer copy a plain shell command.
+- They now copy a machine-readable block with the format:
+  - `ARC_SKILL_INSTALL`
+  - key/value metadata
+  - `END_ARC_SKILL_INSTALL`
+- The copied text also includes natural-language guidance for a client or agent runtime.
 
-### 2.2 数据来源
+### 2.3 Local installer CLI
 
-当前技能列表来自 ArcGIS Online search API，默认查询条件为：
+The installer in `scripts/skillhub-installer.mjs` supports:
 
-`orgid:oC086ufSSQ6Avnw2 AND type:"Code Sample" AND typekeywords:"Agent Skill"`
+- `login`
+- `install`
+- `parse`
 
-这套查询已经验证可以命中多个真实 skill items。
+It can:
 
-### 2.3 安装体验
+- Reuse cached ArcGIS tokens
+- Refresh with a refresh token when possible
+- Open a localhost browser OAuth callback flow
+- Download item data from ArcGIS
+- Extract zip packages to `~/.skillhub/skills/<itemId>` by default
+- Write `.skillhub-install.json`
 
-当前没有继续沿用原来 mock 时代的固定 shell 命令模式。
+### 2.4 Hub web OAuth
 
-当前实现采用：
-- 复制一段安装提示文本。
-- 提示文本里包含 item URL、portal URL、item ID、access level，以及让外部 AI editor/agent 继续完成安装的自然语言说明。
+The Hub itself now supports ArcGIS sign-in.
 
-这只是第一版。后续可以继续细化文案、按钮命名和多按钮分工。
+Implemented pieces:
 
-## 3. 当前架构
+- `src/app/api/auth/arcgis/login/route.ts`
+- `src/app/api/auth/arcgis/callback/route.ts`
+- `src/app/api/auth/arcgis/logout/route.ts`
+- `src/lib/arcgis-auth.ts`
+- `src/proxy.ts`
 
-### 3.1 页面数据流
+Behavior:
+
+- Anonymous users can still browse public results
+- Signed-in users see results based on their ArcGIS access
+- If the browser already has an ArcGIS session, the ArcGIS OAuth step usually reuses it and returns quickly
+- The Hub does not directly read credentials from other ArcGIS apps without going through OAuth
+
+### 2.5 UX and stability fixes
+
+- Sign-out now works correctly because auth links use full-document navigation instead of App Router `Link`
+- The previous Next workspace-root warning is fixed via `turbopack.root` in `next.config.ts`
+- A hydration mismatch risk from relative date rendering was fixed by passing a stable server render timestamp into the card layer
+- `.env.example` was added
+- A non-watch test script `npm run test:run` was added
+- README and development docs were updated to match the current implementation
+
+## 3. Current Architecture
+
+### 3.1 App runtime
+
+- Framework: Next.js 16.2.1 App Router
+- Base path: `/skill-hub`
+- Dist dir: `dist`
+- Turbopack root explicitly pinned in `next.config.ts`
+- Main page and auth/data routes are dynamic server routes
+
+### 3.2 Main page data flow
 
 1. `src/app/page.tsx`
-   - 服务端调用 `getArcGISSkills()`。
-   - 成功时将 skills 传给客户端目录组件。
-   - 失败时返回空列表并展示错误横幅。
+   - Reads auth availability
+   - Reads current ArcGIS session and viewer
+   - Calls `getArcGISSkills()` server-side
+   - Passes a stable `renderTimestamp` into the client tree
 
 2. `src/components/skill-hub-client.tsx`
-   - 承担前端搜索、筛选、排序和列表渲染。
+   - Handles client-side search, filtering, sorting, and rendering
+   - Renders auth-aware UI copy
 
 3. `src/components/skill-card.tsx`
-   - 渲染单个技能卡片。
-   - 复制 `installPrompt`。
-   - 外链跳转到原始 ArcGIS item 页面。
+   - Renders card UI
+   - Copies `installPrompt`
+   - Uses a stable render timestamp for relative date labels
 
-### 3.2 服务端数据层
+### 3.3 ArcGIS data layer
 
-核心逻辑在 `src/lib/arcgis.ts`：
-- 从环境变量读取 portal、org、token、max items、可选 query。
-- 请求 ArcGIS search API。
-- 将原始 item 映射到前端统一的 `Skill` 类型。
-- 生成 `installPrompt`。
-- 推断 `category`。
-- 对不适合直接展示在卡片上的结构化 description 做清洗和 fallback。
+Core file: `src/lib/arcgis.ts`
 
-### 3.3 API 层
+Responsibilities:
 
-`src/app/api/skills/route.ts` 提供动态 route：
-- `GET /api/skills`
-- Node.js runtime
-- `force-dynamic`
+- Build the ArcGIS item query
+- Call ArcGIS search endpoints
+- Normalize search results into the `Skill` type
+- Build `installPrompt`
+- Infer categories
+- Clean text fields
 
-这个接口目前已经可用，但首页当前是直接在服务端页面里调用数据层，不依赖浏览器再请求一次 API。
+### 3.4 ArcGIS auth layer
 
-## 4. 关键文件清单
+Core file: `src/lib/arcgis-auth.ts`
 
-建议后续 agent 先读这些文件：
+Responsibilities:
+
+- Determine whether web auth is configured
+- Begin OAuth login
+- Complete OAuth callback
+- Encrypt and decrypt Hub sessions
+- Refresh expiring sessions in proxy
+- Clear sessions on logout
+
+Cookies used:
+
+- `skillhub_arcgis_session`
+- `skillhub_arcgis_oauth_state`
+- `skillhub_arcgis_oauth_verifier`
+- `skillhub_arcgis_return_to`
+
+### 3.5 Proxy refresh layer
+
+File: `src/proxy.ts`
+
+Current matcher coverage:
+
+- `/skill-hub`
+- `/skill-hub/api/skills`
+
+This is where near-expiry sessions get refreshed before request handling.
+
+## 4. Key Files To Read First
+
+The next contributor should start here:
 
 - `next.config.ts`
-  - 已移除 `output: 'export'`
-  - 仍保留 `distDir: 'dist'` 和 `basePath: '/skill-hub'`
-
+- `src/lib/app-config.ts`
 - `src/lib/arcgis.ts`
-  - ArcGIS 数据接入主入口
-  - 查询参数、映射策略、install prompt 生成都在这里
-
-- `src/types/skill.ts`
-  - 当前 `Skill` 类型定义
-  - 已扩展出 `access`、`averageRating`、`portalUrl`、`snippet`、`thumbnailUrl`、`type`、`typeKeywords`
-
+- `src/lib/arcgis-auth.ts`
+- `src/proxy.ts`
 - `src/app/page.tsx`
-  - 首页服务端读取逻辑
-
-- `src/components/skill-hub-client.tsx`
-  - 客户端交互和信息架构
-
-- `src/components/skill-card.tsx`
-  - 卡片展示和复制行为
-
-- `src/components/search-filter.tsx`
-  - 当前筛选和排序文案
-
 - `src/app/api/skills/route.ts`
-  - 可复用的数据 API
+- `src/app/api/auth/arcgis/login/route.ts`
+- `src/app/api/auth/arcgis/callback/route.ts`
+- `src/app/api/auth/arcgis/logout/route.ts`
+- `src/components/header.tsx`
+- `src/components/skill-hub-client.tsx`
+- `src/components/skill-card.tsx`
+- `scripts/skillhub-installer.mjs`
+- `README.md`
+- `.env.example`
 
-- `src/lib/arcgis.test.ts`
-  - 映射逻辑和 install prompt 的测试样例
+## 5. Environment And Local Setup
 
-## 5. 环境配置
+The repo now assumes `.env.local` for local runtime values.
 
-当前实现依赖本地 `.env.local`。
+Template:
 
-已使用的环境变量：
+- `.env.example`
+
+Relevant variables:
+
+### 5.1 Live skill discovery
+
 - `ARCGIS_PORTAL_URL`
 - `ARCGIS_ORG_ID`
-- `ARCGIS_ACCESS_TOKEN`
 - `ARCGIS_MAX_ITEMS`
-- `ARCGIS_AGENT_SKILL_QUERY`（可选）
+- `ARCGIS_AGENT_SKILL_QUERY` optional override
 
-说明：
-- `.env.local` 已被 gitignore 忽略，不会进入远程仓库。
-- 当前 token 是本地开发态方案，不是最终生产认证方案。
-- 后续若引入 OAuth，需要重构这一层，但可以保留 `arcgis.ts` 的大部分映射逻辑。
+### 5.2 Hub web OAuth
 
-## 6. 当前 UI/数据语义说明
+- `ARCGIS_OAUTH_CLIENT_ID`
+- `ARCGIS_OAUTH_CLIENT_SECRET` optional
+- `SKILL_HUB_SESSION_SECRET`
+- `ARCGIS_OAUTH_REDIRECT_URI` optional explicit override
 
-有几处是“为了快速接上真实数据”做的兼容性处理，后续 agent 需要知情：
+### 5.3 Installer CLI
 
-### 6.1 `downloads` 实际承载的是 `numViews`
+- `ARCGIS_OAUTH_CALLBACK_PORT`
+- `ARCGIS_INSTALL_ROOT`
 
-`Skill` 类型里的 `downloads` 字段目前仍然存在，但页面展示文案已经改成 `Views`。
+Important local callback for the Hub:
 
-原因：
-- ArcGIS item 没有直接可用的标准“下载量”字段。
-- 当前阶段先用 `numViews` 承载这类热度信息。
+- `http://localhost:3000/skill-hub/api/auth/arcgis/callback`
 
-后续如果要继续演进，建议选一个方向：
-- 方向 A：保留内部字段名不动，只继续改 UI 文案。
-- 方向 B：正式把 `downloads` 重命名为 `views`，同步修改类型、组件和测试。
+This URI must be registered in the ArcGIS OAuth app for local development.
 
-### 6.2 `stars` 实际承载的是 `numRatings`
+## 6. Verified Baseline
 
-页面文案已经改为 `Ratings`，但内部字段名仍是 `stars`，属于同类兼容处理。
+These were verified during the latest phase:
 
-### 6.3 安装按钮文案还未最终定稿
+- `npm run build` passes
+- `npm run test:run -- src/lib/arcgis-auth.test.ts src/components/__tests__/skill-card.test.tsx` passes
+- Web sign-in works end-to-end with a configured ArcGIS OAuth app
+- Signed-in viewer state renders in the header
+- Sign-out works end-to-end
+- Build no longer emits the old inferred workspace-root warning
 
-当前复制按钮仍显示 `Copy Install`。
+## 7. Known Constraints And Tradeoffs
 
-用户已经明确表达：
-- 不太认可之前提议的 `Copy Install Prompt` 这个命名。
+### 7.1 Field naming is still transitional
 
-因此后续 agent 在改按钮文案前，建议先把整体安装体验一并设计，而不是只改单个 label。
+These are still compatibility names from the older mock model:
 
-## 7. 已验证结果
+- `downloads` currently displays ArcGIS `numViews`
+- `stars` currently displays ArcGIS `numRatings`
 
-已完成并通过的验证：
+The UI copy was updated to `Views` and `Ratings`, but the data model names are still old.
 
-### 7.1 类型检查
+### 7.2 ArcGIS SSO behavior
 
-命令：
-`npm run type-check`
+The current product behavior is intentional:
 
-结果：通过。
+- The Hub does not auto-detect another ArcGIS app's login state without starting OAuth
+- If the browser already has an ArcGIS session, the OAuth step can usually reuse it
+- The current UX of anonymous browsing plus explicit sign-in is accepted and should be preserved unless product direction changes
 
-### 7.2 测试
+### 7.3 Refresh flow is implemented but not fully battle-tested
 
-命令：
-`npm run test -- --run`
+The refresh-token path exists in both the Hub auth layer and the installer CLI, but a real end-to-end expiry/refresh scenario has not been fully exercised yet.
 
-结果：通过。
+### 7.4 Some older project summary docs are stale
 
-当前已知通过的测试包括：
-- `src/lib/arcgis.test.ts`
-- `src/components/__tests__/skill-card.test.tsx`
-- 以及项目中已有的类型、数据、utils 测试
+These files contain earlier MVP-era assumptions and should not be treated as source of truth:
 
-### 7.3 生产构建
+- `PROJECT_TRACKING.md`
+- `docs/TEAM_SUMMARY.md`
 
-命令：
-`npm run build`
+Use this handoff, the current code, and the updated README instead.
 
-结果：通过。
+## 8. Recommended Next Work
 
-构建输出确认：
-- `/` 为动态 route
-- `/api/skills` 为动态 route
-- `/_not-found` 为静态 route
+### Priority 1: Validate session refresh end-to-end
 
-## 8. 当前已知问题和注意事项
+Best next engineering task:
 
-### 8.1 Next workspace root warning
+- Simulate or force near-expiry Hub sessions
+- Confirm `src/proxy.ts` refreshes them correctly
+- Add targeted tests around refresh success and refresh failure behavior
 
-构建时会出现一个 warning：
-- Next 推断 workspace root 到上层目录，因为检测到多个 lockfile。
+### Priority 2: Add more auth route coverage
 
-这不会阻塞当前开发，但后续可以考虑：
-- 清理多余 lockfile，或
-- 在 Next 配置里显式设置 Turbopack root
+The auth helpers have some tests, but the route-handler behavior is not deeply covered yet.
 
-### 8.2 `discussion_summary.md` 曾经记录了旧运行模式
+Good follow-up areas:
 
-旧内容停留在 static export 时代，已经不适用于当前实现。
+- login redirect behavior
+- callback failure states
+- logout redirect and cookie clearing
+- proxy refresh integration behavior
 
-如果后续 agent 依赖历史总结，请优先以本 handoff 文档和当前代码为准。
+### Priority 3: Refine install UX
 
-### 8.3 `src/data/skills.ts` 仍然保留
+The current install block works, but product polish is still open.
 
-当前首页已经不再依赖这个 mock 数据文件，但它还在仓库里，并且相关测试还存在。
+Questions that remain:
 
-后续可以选择：
-- 保留为 fallback fixture
-- 或在数据层稳定后清理掉
+- whether `Copy Install` is the final button label
+- whether there should be separate actions for `Open Item`, `Copy URL`, and `Copy Install`
+- how org/shared/private access should be shown more explicitly in the card UI
 
-## 9. 建议的下一阶段工作
+### Priority 4: Clean up domain naming
 
-### 优先级 1: 安装体验细化
+Once auth and install UX are stable, do a cleanup pass:
 
-建议从整体交互而不是单个按钮文案入手，重点包括：
-- 卡片应该保留几个动作按钮
-- 复制的文本结构是否需要更短、更像给 AI agent 的 instruction block
-- 是否拆成 `Open Item`、`Copy URL`、`Copy Install` 三类动作
-- 是否在 UI 上显式展示这是“需要登录 ArcGIS 才能访问的私有 skill”
-
-### 优先级 2: UI/UX 精简和重新编排
-
-这是用户已经明确提出的下一大块工作。建议聚焦：
-- 减少首页上不必要的说明文字
-- 收紧 Hero 区和统计区的信息密度
-- 调整卡片层级，让 metadata 更聚焦
-- 根据真实数据规模重新看筛选控件是否需要保留全部维度
-
-### 优先级 3: OAuth 认证升级
-
-当前仅是本地 token 驱动的开发实现。后续如果要进入更稳妥的生产方案，需要设计：
-- ArcGIS OAuth 登录方式
-- token 存储位置和刷新策略
-- 服务端会话模型
-- 多环境配置方式
-
-建议把这部分视为独立工作流，不要把它和 UI/UX 改动混在一个 PR 里。
-
-### 优先级 4: 领域模型清理
-
-当 UI 和认证方案稳定后，可以做一轮命名和数据结构收敛：
 - `downloads` -> `views`
 - `stars` -> `ratings`
-- 明确哪些字段是 ArcGIS 原始元数据，哪些字段是 Hub 派生字段
+- clearly separate ArcGIS source fields from Hub-derived fields
 
-## 10. 给下一个 Agent 的执行建议
+## 9. Suggested Handoff Workflow For The Next Contributor
 
-如果你接手的是首页视觉、交互和信息架构优化，请额外阅读：
-- `docs/UIUX_HANDOFF.md`
+1. Read `README.md` and `.env.example`
+2. Read `src/lib/arcgis.ts`, `src/lib/arcgis-auth.ts`, and `src/proxy.ts`
+3. Confirm `.env.local` is populated locally
+4. Run:
+   - `npm run build`
+   - `npm run test:run`
+5. Pick one bounded workstream before changing code:
+   - auth refresh validation
+   - auth test coverage
+   - install UX refinement
+   - field renaming cleanup
 
-如果你是接手这个项目的后续 agent，建议顺序如下：
+Do not mix all of these in one pass unless there is a strong reason.
 
-1. 先读 `src/lib/arcgis.ts`、`src/types/skill.ts`、`src/app/page.tsx`、`src/components/skill-hub-client.tsx`。
-2. 再确认 `.env.local` 已配置且当前 token 可用。
-3. 用 `npm run test -- --run` 和 `npm run build` 先验证本地基线。
-4. 再选择一个清晰边界的方向继续做：
-   - 安装体验
-   - UI/UX 精简
-   - OAuth 认证
-   - 字段命名清理
+## 10. Summary
 
-不建议一开始就同时改这四块，因为它们会互相影响，容易把当前已验证的可运行基线打散。
+The project is now in a usable integration phase, not a mock prototype phase.
 
-## 11. 总结
+What is already true:
 
-这一轮工作的结果不是“把 mock 数据替换成另一份静态数据”，而是已经完成：
-- 从真实 ArcGIS Online 组织中检索多个 Agent Skill items
-- 在服务端实时读取并映射到 Skill Hub
-- 在页面中保留现有交互能力继续展示
-- 为后续的安装 UX 和 OAuth 升级留下了清晰扩展点
+- live ArcGIS data is wired in
+- Hub OAuth is wired in
+- sign-in and sign-out work
+- installer OAuth exists
+- the repo has current docs and env templates
+- the build is clean
 
-接下来的工作，适合由其他 agent 在这个基线之上继续做细化，而不是重新推翻当前架构。
+The next contributor should build on this baseline rather than re-deriving the architecture.
