@@ -8,6 +8,9 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
   distDir: 'dist',
   basePath: APP_BASE_PATH,
+  experimental: {
+    trustHostHeader: true,
+  } as NextConfig['experimental'],
   images: {
     unoptimized: true,
   },
