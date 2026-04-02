@@ -237,7 +237,7 @@ export async function completeArcGISOAuth(request: NextRequest): Promise<NextRes
       username: profile.username || tokenResponse.username || 'unknown',
     });
 
-    const response = NextResponse.redirect(buildAppUrl(request, returnTo));
+    const response = buildRedirectResponse(returnTo, request);
     clearTransientCookies(response);
     response.cookies.set(SESSION_COOKIE_NAME, session, getSessionCookieOptions(tokenResponse.expiresAt));
     return response;
@@ -249,7 +249,7 @@ export async function completeArcGISOAuth(request: NextRequest): Promise<NextRes
 
 export function clearArcGISSession(request: NextRequest): NextResponse {
   const basePath = getBasePath(request);
-  const response = NextResponse.redirect(buildAppUrl(request, homePath(basePath)));
+  const response = buildRedirectResponse(homePath(basePath), request);
 
   response.cookies.set(SESSION_COOKIE_NAME, '', { ...getTransientCookieOptions(), maxAge: 0 });
   clearTransientCookies(response);
@@ -484,9 +484,9 @@ function getTransientCookieOptions() {
 }
 
 function buildAuthRedirect(request: NextRequest, returnTo: string, message: string, clearTransient: boolean): NextResponse {
-  const redirectUrl = buildAppUrl(request, returnTo);
+  const redirectUrl = new URL(returnTo, 'https://skill-hub.local');
   redirectUrl.searchParams.set('authError', message);
-  const response = NextResponse.redirect(redirectUrl);
+  const response = buildRedirectResponse(`${redirectUrl.pathname}${redirectUrl.search}`, request);
 
   if (clearTransient) {
     clearTransientCookies(response);
@@ -496,8 +496,33 @@ function buildAuthRedirect(request: NextRequest, returnTo: string, message: stri
   return response;
 }
 
+function buildRedirectResponse(location: string, request: NextRequest): NextResponse {
+  const absoluteLocation = new URL(location, getConfiguredAppOrigin() || request.nextUrl.origin).toString();
+
+  return new NextResponse(null, {
+    headers: {
+      location: absoluteLocation,
+    },
+    status: 307,
+  });
+}
+
 function buildAppUrl(request: NextRequest, path: string): URL {
-  return new URL(path, request.nextUrl.origin);
+  return new URL(path, getConfiguredAppOrigin() || request.nextUrl.origin);
+}
+
+function getConfiguredAppOrigin(): string | null {
+  const configuredUrl = process.env.ARCGIS_OAUTH_REDIRECT_URI?.trim();
+
+  if (!configuredUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(configuredUrl).origin;
+  } catch {
+    return null;
+  }
 }
 
 function getOAuthCallbackUrl(request: NextRequest, basePath: string): URL {

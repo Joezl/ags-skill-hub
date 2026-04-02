@@ -120,6 +120,10 @@ The installer will:
 - Session refresh is handled in `src/proxy.ts`
 - Turbopack root is pinned in `next.config.ts` to avoid workspace-root warnings in multi-lockfile environments
 
+## Deployment Notes
+
+- Windows IIS deployment summary: `docs/WINDOWS_IIS_DEPLOYMENT.md`
+
 ## Project Structure
 
 ```text
