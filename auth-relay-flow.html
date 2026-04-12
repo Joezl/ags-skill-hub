@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArcGIS Skill Install — Auth Relay Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 40px 24px; }
+  h1 { text-align: center; font-size: 1.4rem; font-weight: 600; color: #f8fafc; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: #94a3b8; font-size: 0.9rem; margin-bottom: 48px; }
+
+  .scenario-toggle { display: flex; gap: 8px; justify-content: center; margin-bottom: 40px; }
+  .tab { padding: 8px 20px; border-radius: 20px; border: 1px solid #334155; background: transparent; color: #94a3b8; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+  .tab.active { background: #1e40af; border-color: #3b82f6; color: #fff; }
+
+  .flow { display: none; flex-direction: column; gap: 0; max-width: 820px; margin: 0 auto; }
+  .flow.active { display: flex; }
+
+  /* Actors row */
+  .actors { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+  .actor { text-align: center; }
+  .actor-icon { width: 56px; height: 56px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin: 0 auto 8px; }
+  .actor-label { font-size: 0.78rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
+  .actor-sub { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+  .icon-user { background: #1e3a5f; }
+  .icon-agent { background: #1a2e1a; }
+  .icon-hub { background: #2d1b4e; }
+  .icon-arcgis { background: #3b1a1a; }
+
+  /* Steps */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0; position: relative; min-height: 72px; }
+
+  /* Lane lines */
+  .lane { border-left: 1px dashed #1e293b; padding: 0 8px; display: flex; align-items: center; justify-content: center; position: relative; }
+  .lane:first-child { border-left: none; }
+
+  /* Arrows */
+  .arrow-row { position: relative; height: 64px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .arrow-line { position: absolute; top: 32px; height: 2px; background: #3b82f6; }
+  .arrow-line.green { background: #22c55e; }
+  .arrow-line.orange { background: #f97316; }
+  .arrow-line.purple { background: #a855f7; }
+  .arrowhead { position: absolute; top: 26px; width: 0; height: 0; }
+  .arrowhead.right { border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 10px solid #3b82f6; }
+  .arrowhead.right.green { border-left-color: #22c55e; }
+  .arrowhead.right.orange { border-left-color: #f97316; }
+  .arrowhead.right.purple { border-left-color: #a855f7; }
+  .arrowhead.left { border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-right: 10px solid #22c55e; }
+  .arrowhead.left.orange { border-right-color: #f97316; }
+
+  .arrow-label { position: absolute; top: 6px; font-size: 0.73rem; color: #cbd5e1; background: #0f1117; padding: 1px 6px; border-radius: 4px; white-space: nowrap; left: 50%; transform: translateX(-50%); }
+
+  .step-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #1e293b; font-size: 0.7rem; font-weight: 700; color: #94a3b8; flex-shrink: 0; margin-right: 8px; }
+
+  .note { background: #1e293b; border-radius: 8px; padding: 10px 14px; font-size: 0.78rem; color: #94a3b8; text-align: center; }
+  .note strong { color: #e2e8f0; }
+
+  /* Problem highlight */
+  .problem-box { background: #2d1a1a; border: 1px solid #7f1d1d; border-radius: 10px; padding: 14px 18px; margin-bottom: 32px; font-size: 0.82rem; color: #fca5a5; text-align: center; }
+  .problem-box strong { color: #f87171; display: block; margin-bottom: 4px; font-size: 0.88rem; }
+
+  .solution-box { background: #0f2d1a; border: 1px solid #14532d; border-radius: 10px; padding: 14px 18px; margin-bottom: 32px; font-size: 0.82rem; color: #86efac; text-align: center; }
+  .solution-box strong { color: #4ade80; display: block; margin-bottom: 4px; font-size: 0.88rem; }
+
+  /* Big flow diagram using SVG */
+  .diagram-wrap { max-width: 820px; margin: 0 auto; }
+  svg { width: 100%; height: auto; }
+
+  /* Legend */
+  .legend { display: flex; gap: 20px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #94a3b8; }
+  .legend-dot { width: 12px; height: 3px; border-radius: 2px; }
+
+  /* comparison table */
+  .compare { max-width: 820px; margin: 0 auto; }
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .compare-card { background: #1e293b; border-radius: 12px; padding: 20px; }
+  .compare-card.bad { border-top: 3px solid #ef4444; }
+  .compare-card.good { border-top: 3px solid #22c55e; }
+  .compare-card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 14px; }
+  .compare-card.bad h3 { color: #f87171; }
+  .compare-card.good h3 { color: #4ade80; }
+  .compare-item { display: flex; gap: 8px; align-items: flex-start; font-size: 0.8rem; color: #94a3b8; margin-bottom: 10px; line-height: 1.5; }
+  .compare-item span:first-child { flex-shrink: 0; margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<h1>ArcGIS Skill Install — Auth Problem & Solution</h1>
+<p class="subtitle">Why the current OAuth flow breaks inside AI agents, and how the Token Relay fixes it</p>
+
+<div class="scenario-toggle">
+  <button class="tab active" onclick="show('problem')">😰 Current Problem</button>
+  <button class="tab" onclick="show('solution')">✅ Token Relay Solution</button>
+  <button class="tab" onclick="show('compare')">⚖️ Side-by-Side</button>
+</div>
+
+<!-- PROBLEM TAB -->
+<div class="flow active" id="problem">
+  <div class="diagram-wrap">
+    <div class="problem-box">
+      <strong>The Problem: Agent can't catch the OAuth redirect</strong>
+      Current flow spins up a tiny web server on port 8976 waiting for ArcGIS to redirect back after login.
+      AI agents (Claude Code, Codex) run in sandboxes — they can't open browsers or run localhost servers that the user's browser can actually reach.
+    </div>
+    <svg viewBox="0 0 780 480" xmlns="http://www.w3.org/2000/svg">
+      <!-- Background -->
+      <rect width="780" height="480" fill="#0f1117"/>
+
+      <!-- Actor boxes -->
+      <!-- User -->
+      <rect x="40" y="20" width="120" height="60" rx="10" fill="#1e3a5f"/>
+      <text x="100" y="44" text-anchor="middle" fill="#93c5fd" font-size="24">👤</text>
+      <text x="100" y="68" text-anchor="middle" fill="#93c5fd" font-size="11" font-weight="600">USER</text>
+
+      <!-- Agent (Claude Code) -->
+      <rect x="220" y="20" width="140" height="60" rx="10" fill="#1a2e1a"/>
+      <text x="290" y="44" text-anchor="middle" fill="#86efac" font-size="22">🤖</text>
+      <text x="290" y="68" text-anchor="middle" fill="#86efac" font-size="11" font-weight="600">AI AGENT</text>
+
+      <!-- Localhost server -->
+      <rect x="430" y="20" width="140" height="60" rx="10" fill="#2d2d1a" stroke="#854d0e" stroke-width="1.5"/>
+      <text x="500" y="44" text-anchor="middle" fill="#fbbf24" font-size="22">💻</text>
+      <text x="500" y="62" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600">LOCALHOST :8976</text>
+      <text x="500" y="75" text-anchor="middle" fill="#92400e" font-size="9">(agent tries to spin this up)</text>
+
+      <!-- ArcGIS -->
+      <rect x="630" y="20" width="120" height="60" rx="10" fill="#3b1a1a"/>
+      <text x="690" y="44" text-anchor="middle" fill="#fca5a5" font-size="22">🗺️</text>
+      <text x="690" y="68" text-anchor="middle" fill="#fca5a5" font-size="11" font-weight="600">ARCGIS ONLINE</text>
+
+      <!-- Step 1: User pastes install block -->
+      <line x1="100" y1="80" x2="100" y2="130" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="290" y1="80" x2="290" y2="130" stroke="#1a2e1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="500" y1="80" x2="500" y2="130" stroke="#2d2d1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="690" y1="80" x2="690" y2="130" stroke="#3b1a1a" stroke-width="1" stroke-dasharray="4"/>
+
+      <line x1="100" y1="118" x2="280" y2="118" stroke="#3b82f6" stroke-width="1.5"/>
+      <polygon points="280,113 290,118 280,123" fill="#3b82f6"/>
+      <rect x="130" y="106" width="120" height="18" rx="4" fill="#0f1117"/>
+      <text x="190" y="118" text-anchor="middle" fill="#93c5fd" font-size="10">① paste ARC_SKILL_INSTALL</text>
+
+      <!-- Step 2: Agent tries to start server -->
+      <line x1="290" y1="130" x2="290" y2="175" stroke="#1a2e1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="500" y1="130" x2="500" y2="175" stroke="#2d2d1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="690" y1="130" x2="690" y2="175" stroke="#3b1a1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="100" y1="130" x2="100" y2="175" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="4"/>
+
+      <line x1="290" y1="163" x2="420" y2="163" stroke="#f97316" stroke-width="1.5"/>
+      <polygon points="420,158 430,163 420,168" fill="#f97316"/>
+      <rect x="305" y="151" width="120" height="18" rx="4" fill="#0f1117"/>
+      <text x="365" y="163" text-anchor="middle" fill="#fb923c" font-size="10">② start server on :8976</text>
+
+      <!-- Step 3: Open browser for ArcGIS -->
+      <line x1="290" y1="175" x2="290" y2="215" stroke="#1a2e1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="500" y1="175" x2="500" y2="215" stroke="#2d2d1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="690" y1="175" x2="690" y2="215" stroke="#3b1a1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="100" y1="175" x2="100" y2="215" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="4"/>
+
+      <line x1="290" y1="203" x2="680" y2="203" stroke="#f97316" stroke-width="1.5"/>
+      <polygon points="680,198 690,203 680,208" fill="#f97316"/>
+      <rect x="390" y="191" width="160" height="18" rx="4" fill="#0f1117"/>
+      <text x="470" y="203" text-anchor="middle" fill="#fb923c" font-size="10">③ open browser → arcgis.com/oauth</text>
+
+      <!-- Step 4: User logs in -->
+      <line x1="290" y1="215" x2="290" y2="255" stroke="#1a2e1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="500" y1="215" x2="500" y2="255" stroke="#2d2d1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="690" y1="215" x2="690" y2="255" stroke="#3b1a1a" stroke-width="1" stroke-dasharray="4"/>
+      <line x1="100" y1="215" x2="100" y2="255" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="4"/>
+
+      <line x1="690" y1="243" x2="110" y2="243" stroke="#22c55e" stroke-width="1.5"/>
+      <polygon points="110,238 100,243 110,248" fill="#22c55e"/>
+      <rect x="240" y="231" width="210" height="18" rx="4" fill="#0f1117"/>
+      <text x="345" y="243" text-anchor="middle" fill="#86efac" font-size="10">④ user logs in → redirect to localhost:8976</text>
+
+      <!-- BIG PROBLEM BOX -->
+      <rect x="350" y="262" width="200" height="80" rx="10" fill="#450a0a" stroke="#ef4444" stroke-width="2"/>
+      <text x="450" y="284" text-anchor="middle" fill="#f87171" font-size="13" font-weight="700">❌ FAILS HERE</text>
+      <text x="450" y="304" text-anchor="middle" fill="#fca5a5" font-size="10">Browser tries to reach</text>
+      <text x="450" y="319" text-anchor="middle" fill="#fca5a5" font-size="10">localhost:8976... but that's</text>
+      <text x="450" y="334" text-anchor="middle" fill="#fca5a5" font-size="10">inside the agent's sandbox!</text>
+
+      <!-- Arrow from redirect to problem box -->
+      <line x1="450" y1="255" x2="450" y2="260" stroke="#ef4444" stroke-width="2"/>
+      <polygon points="445,258 450,268 455,258" fill="#ef4444"/>
+
+      <!-- Explanation at bottom -->
+      <rect x="40" y="370" width="700" height="90" rx="10" fill="#1e293b"/>
+      <text x="390" y="395" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">Why it breaks</text>
+      <text x="390" y="415" text-anchor="middle" fill="#94a3b8" font-size="11">The agent is in a sandbox. It might start the :8976 server inside its own environment,</text>
+      <text x="390" y="432" text-anchor="middle" fill="#94a3b8" font-size="11">but the user's browser redirects to localhost:8976 on the user's machine — a completely</text>
+      <text x="390" y="449" text-anchor="middle" fill="#94a3b8" font-size="11">different machine. The redirect lands nowhere. Login is stuck.</text>
+    </svg>
+  </div>
+</div>
+
+<!-- SOLUTION TAB -->
+<div class="flow" id="solution">
+  <div class="diagram-wrap">
+    <div class="solution-box">
+      <strong>The Fix: Skill Hub as the OAuth broker (Token Relay)</strong>
+      The Skill Hub — which already knows how to do ArcGIS OAuth — handles the browser part.
+      The agent just polls the Skill Hub waiting for "did the user log in yet?" The token never needs to cross the browser-to-agent gap directly.
+    </div>
+    <svg viewBox="0 0 780 560" xmlns="http://www.w3.org/2000/svg">
+      <rect width="780" height="560" fill="#0f1117"/>
+
+      <!-- Actor boxes -->
+      <rect x="20" y="20" width="110" height="60" rx="10" fill="#1e3a5f"/>
+      <text x="75" y="44" text-anchor="middle" fill="#93c5fd" font-size="22">👤</text>
+      <text x="75" y="68" text-anchor="middle" fill="#93c5fd" font-size="11" font-weight="600">USER</text>
+
+      <rect x="175" y="20" width="130" height="60" rx="10" fill="#1a2e1a"/>
+      <text x="240" y="44" text-anchor="middle" fill="#86efac" font-size="22">🤖</text>
+      <text x="240" y="68" text-anchor="middle" fill="#86efac" font-size="11" font-weight="600">AI AGENT</text>
+
+      <rect x="355" y="20" width="130" height="60" rx="10" fill="#2d1b4e"/>
+      <text x="420" y="44" text-anchor="middle" fill="#d8b4fe" font-size="22">🌐</text>
+      <text x="420" y="62" text-anchor="middle" fill="#d8b4fe" font-size="10" font-weight="600">SKILL HUB SERVER</text>
+      <text x="420" y="75" text-anchor="middle" fill="#7c3aed" font-size="9">(already deployed internally)</text>
+
+      <rect x="535" y="20" width="120" height="60" rx="10" fill="#3b1a1a"/>
+      <text x="595" y="44" text-anchor="middle" fill="#fca5a5" font-size="22">🗺️</text>
+      <text x="595" y="68" text-anchor="middle" fill="#fca5a5" font-size="11" font-weight="600">ARCGIS ONLINE</text>
+
+      <!-- Lane lines -->
+      <line x1="75" y1="80" x2="75" y2="540" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="3,5"/>
+      <line x1="240" y1="80" x2="240" y2="540" stroke="#1a2e1a" stroke-width="1" stroke-dasharray="3,5"/>
+      <line x1="420" y1="80" x2="420" y2="540" stroke="#2d1b4e" stroke-width="1" stroke-dasharray="3,5"/>
+      <line x1="595" y1="80" x2="595" y2="540" stroke="#3b1a1a" stroke-width="1" stroke-dasharray="3,5"/>
+
+      <!-- Step 1 -->
+      <line x1="75" y1="112" x2="230" y2="112" stroke="#3b82f6" stroke-width="1.5"/>
+      <polygon points="230,107 240,112 230,117" fill="#3b82f6"/>
+      <rect x="90" y="100" width="130" height="17" rx="3" fill="#0f1117"/>
+      <text x="155" y="112" text-anchor="middle" fill="#93c5fd" font-size="10">① paste ARC_SKILL_INSTALL</text>
+
+      <!-- Step 2 -->
+      <line x1="240" y1="145" x2="410" y2="145" stroke="#a855f7" stroke-width="1.5"/>
+      <polygon points="410,140 420,145 410,150" fill="#a855f7"/>
+      <rect x="240" y="133" width="175" height="17" rx="3" fill="#0f1117"/>
+      <text x="328" y="145" text-anchor="middle" fill="#d8b4fe" font-size="10">② POST /api/auth/relay/sessions</text>
+
+      <!-- Step 3 response -->
+      <line x1="420" y1="168" x2="250" y2="168" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <polygon points="250,163 240,168 250,173" fill="#a855f7"/>
+      <rect x="268" y="156" width="150" height="17" rx="3" fill="#0f1117"/>
+      <text x="343" y="168" text-anchor="middle" fill="#c084fc" font-size="10">③ returns session_id + auth_url</text>
+
+      <!-- Step 4 agent tells user -->
+      <line x1="240" y1="195" x2="85" y2="195" stroke="#3b82f6" stroke-width="1.5"/>
+      <polygon points="85,190 75,195 85,200" fill="#3b82f6"/>
+      <rect x="90" y="183" width="158" height="17" rx="3" fill="#0f1117"/>
+      <text x="169" y="195" text-anchor="middle" fill="#93c5fd" font-size="10">④ "Open this link to log in →"</text>
+
+      <!-- Step 5 user opens link -->
+      <line x1="75" y1="222" x2="410" y2="222" stroke="#f97316" stroke-width="1.5"/>
+      <polygon points="410,217 420,222 410,227" fill="#f97316"/>
+      <rect x="160" y="210" width="120" height="17" rx="3" fill="#0f1117"/>
+      <text x="220" y="222" text-anchor="middle" fill="#fb923c" font-size="10">⑤ user opens auth_url</text>
+
+      <!-- Step 6 hub → arcgis -->
+      <line x1="420" y1="249" x2="585" y2="249" stroke="#f97316" stroke-width="1.5"/>
+      <polygon points="585,244 595,249 585,254" fill="#f97316"/>
+      <rect x="420" y="237" width="170" height="17" rx="3" fill="#0f1117"/>
+      <text x="505" y="249" text-anchor="middle" fill="#fb923c" font-size="10">⑥ Skill Hub redirects → ArcGIS OAuth</text>
+
+      <!-- Step 7 user logs in arcgis -->
+      <rect x="490" y="266" width="210" height="30" rx="6" fill="#1a2e1a" stroke="#16a34a" stroke-width="1"/>
+      <text x="595" y="283" text-anchor="middle" fill="#86efac" font-size="11">👤 User logs in normally</text>
+
+      <!-- Step 8 arcgis callback to hub -->
+      <line x1="595" y1="296" x2="430" y2="296" stroke="#22c55e" stroke-width="1.5"/>
+      <polygon points="430,291 420,296 430,301" fill="#22c55e"/>
+      <rect x="432" y="284" width="160" height="17" rx="3" fill="#0f1117"/>
+      <text x="512" y="296" text-anchor="middle" fill="#4ade80" font-size="10">⑧ ArcGIS redirects back to Hub</text>
+
+      <!-- Hub stores token -->
+      <rect x="330" y="312" width="180" height="28" rx="6" fill="#1e1035" stroke="#7c3aed" stroke-width="1"/>
+      <text x="420" y="325" text-anchor="middle" fill="#d8b4fe" font-size="10">🔐 Hub stores token (keyed to session_id)</text>
+      <text x="420" y="336" text-anchor="middle" fill="#7c3aed" font-size="9">5-min TTL, returned once, then deleted</text>
+
+      <!-- Step 9 agent polls -->
+      <line x1="240" y1="358" x2="410" y2="358" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4,2"/>
+      <polygon points="410,353 420,358 410,363" fill="#a855f7"/>
+      <rect x="228" y="346" width="200" height="17" rx="3" fill="#0f1117"/>
+      <text x="328" y="358" text-anchor="middle" fill="#c084fc" font-size="10">⑨ agent polls: "ready yet?" (every 3s)</text>
+
+      <!-- Step 10 hub returns token -->
+      <line x1="420" y1="381" x2="250" y2="381" stroke="#22c55e" stroke-width="2"/>
+      <polygon points="250,376 240,381 250,386" fill="#22c55e"/>
+      <rect x="268" y="369" width="148" height="17" rx="3" fill="#0f1117"/>
+      <text x="342" y="381" text-anchor="middle" fill="#4ade80" font-size="10">⑩ "yes!" → returns token (once)</text>
+
+      <!-- Step 11 agent downloads -->
+      <line x1="240" y1="410" x2="585" y2="410" stroke="#22c55e" stroke-width="2"/>
+      <polygon points="585,405 595,410 585,415" fill="#22c55e"/>
+      <rect x="300" y="398" width="220" height="17" rx="3" fill="#0f1117"/>
+      <text x="410" y="410" text-anchor="middle" fill="#4ade80" font-size="10">⑪ agent downloads item zip with token</text>
+
+      <!-- Step 12 agent installs -->
+      <line x1="240" y1="438" x2="85" y2="438" stroke="#22c55e" stroke-width="2"/>
+      <polygon points="85,433 75,438 85,443" fill="#22c55e"/>
+      <rect x="82" y="426" width="172" height="17" rx="3" fill="#0f1117"/>
+      <text x="168" y="438" text-anchor="middle" fill="#4ade80" font-size="10">⑫ skill installed! notifies user ✅</text>
+
+      <!-- Bottom note -->
+      <rect x="40" y="460" width="700" height="70" rx="10" fill="#0f2d1a" stroke="#166534" stroke-width="1"/>
+      <text x="390" y="482" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="600">Key insight</text>
+      <text x="390" y="500" text-anchor="middle" fill="#86efac" font-size="11">The browser never needs to reach back to the agent's machine. OAuth only involves the</text>
+      <text x="390" y="516" text-anchor="middle" fill="#86efac" font-size="11">user's browser ↔ ArcGIS ↔ Skill Hub. The agent just waits and then picks up the token.</text>
+    </svg>
+  </div>
+</div>
+
+<!-- COMPARE TAB -->
+<div class="flow" id="compare">
+  <div class="compare">
+    <div class="compare-grid">
+      <div class="compare-card bad">
+        <h3>❌ Current (Localhost Callback)</h3>
+        <div class="compare-item"><span>😰</span><span>Agent starts a tiny web server on port 8976 <em>inside its sandbox</em></span></div>
+        <div class="compare-item"><span>🌐</span><span>Opens ArcGIS OAuth — user logs in</span></div>
+        <div class="compare-item"><span>↩️</span><span>ArcGIS redirects browser to <code>localhost:8976</code></span></div>
+        <div class="compare-item"><span>💥</span><span>Browser hits <code>localhost:8976</code> on the <strong>user's machine</strong>, not the agent's sandbox — connection refused</span></div>
+        <div class="compare-item"><span>🚫</span><span>Login stuck. No token received. Install fails.</span></div>
+      </div>
+      <div class="compare-card good">
+        <h3>✅ Proposed (Token Relay)</h3>
+        <div class="compare-item"><span>📋</span><span>User pastes install block → agent calls Skill Hub to create a relay session</span></div>
+        <div class="compare-item"><span>🔗</span><span>Agent shows user one link: <code>skillhub/auth/relay?session=xyz</code></span></div>
+        <div class="compare-item"><span>🌐</span><span>User clicks link, logs in via normal ArcGIS OAuth — all in browser</span></div>
+        <div class="compare-item"><span>🔐</span><span>Skill Hub stores the token keyed to session ID (short-lived, single-use)</span></div>
+        <div class="compare-item"><span>✅</span><span>Agent polls Skill Hub until token is ready → downloads zip → installs skill</span></div>
+      </div>
+    </div>
+
+    <br>
+    <div style="background:#1e293b; border-radius:12px; padding:20px; margin-top:8px;">
+      <p style="text-align:center; font-size:0.85rem; color:#94a3b8; margin-bottom:16px; font-weight:600;">What the user experience looks like end-to-end</p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; gap:12px; align-items:flex-start; font-size:0.82rem; color:#cbd5e1; background:#0f1117; padding:10px 14px; border-radius:8px;">
+          <span style="color:#3b82f6; font-weight:700; min-width:24px;">1.</span>
+          <span>User visits Skill Hub, finds a skill, clicks <strong>"Copy Install Prompt"</strong></span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; font-size:0.82rem; color:#cbd5e1; background:#0f1117; padding:10px 14px; border-radius:8px;">
+          <span style="color:#3b82f6; font-weight:700; min-width:24px;">2.</span>
+          <span>User pastes into Claude Code or Codex — agent sees the <code>ARC_SKILL_INSTALL</code> block</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; font-size:0.82rem; color:#cbd5e1; background:#0f1117; padding:10px 14px; border-radius:8px;">
+          <span style="color:#3b82f6; font-weight:700; min-width:24px;">3.</span>
+          <span>Agent: <em>"This skill requires ArcGIS login. Open this link in your browser: <u>https://skillhub/auth/relay?session=abc123</u>"</em></span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; font-size:0.82rem; color:#cbd5e1; background:#0f1117; padding:10px 14px; border-radius:8px;">
+          <span style="color:#86efac; font-weight:700; min-width:24px;">4.</span>
+          <span>User clicks link, ArcGIS OAuth opens, logs in — page says "Done! Return to your agent."</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; font-size:0.82rem; color:#cbd5e1; background:#0f1117; padding:10px 14px; border-radius:8px;">
+          <span style="color:#86efac; font-weight:700; min-width:24px;">5.</span>
+          <span>Agent was polling in the background — token arrives automatically. Downloads and installs skill. <strong>Done.</strong></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> User → Agent action</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div> Agent → Skill Hub</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div> Browser OAuth flow</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Success / token handoff</div>
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.flow').forEach(f => f.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.target.classList.add('active');
+  }
+</script>
+</body>
+</html>
