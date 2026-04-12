@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { EncryptJWT, jwtDecrypt } from 'jose';
 import { APP_BASE_PATH } from '@/lib/app-config';
+import { completeRelaySession, failRelaySession, getRelaySession } from '@/lib/relay-store';
 
 const DEFAULT_PORTAL_URL = 'https://www.arcgis.com';
 const DEFAULT_TOKEN_EXPIRY_SECONDS = 1800;
@@ -57,6 +58,18 @@ export interface ArcGISSession extends ArcGISViewer {
   accessToken: string;
   expiresAt: number;
   refreshToken: string | null;
+}
+
+export interface ExchangedAuthCode {
+  accessToken: string;
+  expiresAt: number;
+  refreshToken: string | null;
+  username: string | null;
+}
+
+export interface ParsedRelayState {
+  sessionId: string;
+  state: string;
 }
 
 export function getArcGISAuthAvailability(): ArcGISAuthAvailability {
@@ -119,7 +132,7 @@ export async function beginArcGISOAuth(request: NextRequest): Promise<NextRespon
     const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get('returnTo'), basePath);
     const state = randomBytes(16).toString('hex');
     const codeVerifier = randomBytes(64).toString('base64url');
-    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+    const codeChallenge = createCodeChallenge(codeVerifier);
     const authorizeUrl = new URL(`${portalUrl}/sharing/rest/oauth2/authorize`);
 
     authorizeUrl.searchParams.set('client_id', getClientId());
@@ -221,11 +234,11 @@ export async function completeArcGISOAuth(request: NextRequest): Promise<NextRes
   }
 
   try {
-    const tokenResponse = await exchangeAuthorizationCode({
-      callbackUrl: callbackUrl.toString(),
+    const tokenResponse = await exchangeAuthCode({
       code,
       codeVerifier,
       portalUrl,
+      redirectUri: callbackUrl.toString(),
     });
     const profile = await fetchArcGISProfile(portalUrl, tokenResponse.accessToken);
     const session = await encryptSession({
@@ -245,6 +258,145 @@ export async function completeArcGISOAuth(request: NextRequest): Promise<NextRes
     const message = caughtError instanceof Error ? caughtError.message : 'ArcGIS sign-in could not be completed.';
     return buildAuthRedirect(request, returnTo, message, true);
   }
+}
+
+export async function completeRelayArcGISOAuth(request: NextRequest): Promise<NextResponse> {
+  const relayState = parseRelayState(request.nextUrl.searchParams.get('state'));
+  const error = request.nextUrl.searchParams.get('error');
+  const errorDescription = request.nextUrl.searchParams.get('error_description');
+
+  if (!relayState) {
+    return renderRelayErrorPage('Login session expired. Please return to the agent and try again.', 410);
+  }
+
+  const session = getRelaySession(relayState.sessionId);
+
+  if (!session || session.expiresAt < Date.now()) {
+    return renderRelayErrorPage('Login session expired. Please return to the agent and try again.', 410);
+  }
+
+  if (error) {
+    failRelaySession(session.sessionId, errorDescription || error);
+    return renderRelayErrorPage('ArcGIS sign-in was not completed. Please return to the agent and try again.', 400);
+  }
+
+  if (relayState.state !== session.state) {
+    return renderRelayErrorPage('ArcGIS sign-in state did not match. Please return to the agent and try again.', 400);
+  }
+
+  const code = request.nextUrl.searchParams.get('code');
+
+  if (!code) {
+    failRelaySession(session.sessionId, 'Missing authorization code.');
+    return renderRelayErrorPage('ArcGIS sign-in did not return a usable authorization code.', 400);
+  }
+
+  try {
+    const tokenResponse = await exchangeAuthCode({
+      code,
+      codeVerifier: session.codeVerifier,
+      portalUrl: session.portalUrl,
+      redirectUri: getRelayCallbackUrlForOrigin(request.nextUrl.origin).toString(),
+    });
+
+    completeRelaySession(session.sessionId, tokenResponse.accessToken, tokenResponse.expiresAt);
+
+    return NextResponse.redirect(new URL(`${APP_BASE_PATH}/auth/relay/done?session=${session.sessionId}`, request.nextUrl.origin));
+  } catch (caughtError) {
+    const message = caughtError instanceof Error ? caughtError.message : 'ArcGIS sign-in could not be completed.';
+    failRelaySession(session.sessionId, message);
+    return renderRelayErrorPage('ArcGIS sign-in could not be completed. Please return to the agent and try again.', 500);
+  }
+}
+
+export async function exchangeAuthCode(options: {
+  code: string;
+  codeVerifier: string;
+  portalUrl: string;
+  redirectUri: string;
+}): Promise<ExchangedAuthCode> {
+  return exchangeAuthorizationCode({
+    callbackUrl: options.redirectUri,
+    code: options.code,
+    codeVerifier: options.codeVerifier,
+    portalUrl: options.portalUrl,
+  });
+}
+
+export function createCodeChallenge(codeVerifier: string): string {
+  return createHash('sha256').update(codeVerifier).digest('base64url');
+}
+
+export function buildRelayState(state: string, sessionId: string): string {
+  return `${state}:${sessionId}`;
+}
+
+export function parseRelayState(value: string | null | undefined): ParsedRelayState | null {
+  if (!value) {
+    return null;
+  }
+
+  const separatorIndex = value.indexOf(':');
+
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+    return null;
+  }
+
+  return {
+    sessionId: value.slice(separatorIndex + 1),
+    state: value.slice(0, separatorIndex),
+  };
+}
+
+export function inferRequestOriginFromHeaders(headersList: Headers): string | null {
+  const forwardedHost = headersList.get('x-forwarded-host')?.split(',')[0]?.trim();
+  const host = forwardedHost || headersList.get('host')?.trim();
+
+  if (!host) {
+    return null;
+  }
+
+  const forwardedProto = headersList.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const protocol = forwardedProto || (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
+
+  return `${protocol}://${host}`;
+}
+
+export function getRelayAppOrigin(requestOrigin?: string | null): string | null {
+  return getConfiguredRelayAppOrigin() || requestOrigin || getConfiguredAppOrigin();
+}
+
+export function getRelayCallbackUrlForOrigin(requestOrigin?: string | null, basePath = APP_BASE_PATH): URL {
+  const configuredUrl = process.env.ARCGIS_RELAY_REDIRECT_URI?.trim();
+
+  if (configuredUrl) {
+    return new URL(configuredUrl);
+  }
+
+  const oauthConfiguredUrl = process.env.ARCGIS_OAUTH_REDIRECT_URI?.trim();
+
+  if (oauthConfiguredUrl) {
+    return new URL(oauthConfiguredUrl);
+  }
+
+  return buildAbsoluteAppUrl(`${basePath}/api/auth/arcgis/callback`, getRelayAppOrigin(requestOrigin));
+}
+
+export function getRelayLandingUrlForOrigin(sessionId: string, requestOrigin?: string | null, basePath = APP_BASE_PATH): URL {
+  const url = buildAbsoluteAppUrl(`${basePath}/auth/relay`, getRelayAppOrigin(requestOrigin));
+
+  url.searchParams.set('session', sessionId);
+  return url;
+}
+
+export function getOAuthCallbackUrlForOrigin(requestOrigin?: string | null, basePath = APP_BASE_PATH): URL {
+  const configuredUrl = process.env.ARCGIS_OAUTH_REDIRECT_URI?.trim();
+
+  if (configuredUrl) {
+    return new URL(configuredUrl);
+  }
+
+  return buildAbsoluteAppUrl(`${basePath}/api/auth/arcgis/callback`, getConfiguredAppOrigin() || requestOrigin);
 }
 
 export function clearArcGISSession(request: NextRequest): NextResponse {
@@ -270,7 +422,7 @@ async function exchangeAuthorizationCode(input: {
   code: string;
   codeVerifier: string;
   portalUrl: string;
-}): Promise<{ accessToken: string; expiresAt: number; refreshToken: string | null; username: string | null }> {
+}): Promise<ExchangedAuthCode> {
   const form = new URLSearchParams({
     client_id: getClientId(),
     code: input.code,
@@ -508,7 +660,7 @@ function buildRedirectResponse(location: string, request: NextRequest): NextResp
 }
 
 function buildAppUrl(request: NextRequest, path: string): URL {
-  return new URL(path, getConfiguredAppOrigin() || request.nextUrl.origin);
+  return buildAbsoluteAppUrl(path, getConfiguredAppOrigin() || request.nextUrl.origin);
 }
 
 function getConfiguredAppOrigin(): string | null {
@@ -525,14 +677,24 @@ function getConfiguredAppOrigin(): string | null {
   }
 }
 
-function getOAuthCallbackUrl(request: NextRequest, basePath: string): URL {
-  const configuredUrl = process.env.ARCGIS_OAUTH_REDIRECT_URI?.trim();
+function getConfiguredRelayAppOrigin(): string | null {
+  const explicitRelayUrl = process.env.ARCGIS_RELAY_REDIRECT_URI?.trim();
 
-  if (configuredUrl) {
-    return new URL(configuredUrl);
+  if (explicitRelayUrl) {
+    return parseOrigin(explicitRelayUrl);
   }
 
-  return buildAppUrl(request, `${basePath}/api/auth/arcgis/callback`);
+  const publicUrl = process.env.SKILL_HUB_PUBLIC_URL?.trim();
+
+  if (publicUrl) {
+    return parseOrigin(publicUrl);
+  }
+
+  return null;
+}
+
+function getOAuthCallbackUrl(request: NextRequest, basePath: string): URL {
+  return getOAuthCallbackUrlForOrigin(request.nextUrl.origin, basePath);
 }
 
 function getBasePath(request: NextRequest): string {
@@ -569,4 +731,41 @@ function readPayloadNullableString(value: unknown): string | null {
 
 function readPayloadNumber(value: unknown): number {
   return typeof value === 'number' ? value : 0;
+}
+
+function buildAbsoluteAppUrl(path: string, origin: string | null | undefined): URL {
+  if (!origin) {
+    throw new Error('A public Skill Hub origin is required to build this URL.');
+  }
+
+  return new URL(path, origin);
+}
+
+function parseOrigin(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function renderRelayErrorPage(message: string, status: number) {
+  return new NextResponse(
+    `<!doctype html><html><head><meta charset="utf-8"><title>ArcGIS Login</title></head><body><main style="font-family: ui-sans-serif, system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1.5rem;"><h1>ArcGIS Login</h1><p>${escapeHtml(message)}</p></main></body></html>`,
+    {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+      },
+      status,
+    }
+  );
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

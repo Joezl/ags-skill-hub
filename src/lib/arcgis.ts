@@ -1,4 +1,5 @@
 import type { AccessLevel, Category, Skill } from '@/types/skill';
+import { APP_BASE_PATH } from '@/lib/app-config';
 
 interface ArcGISSearchResponse {
   nextStart: number;
@@ -39,6 +40,7 @@ export function buildInstallPrompt(skill: Pick<Skill, 'access' | 'installUrl' | 
   const itemType = skill.type || 'Code Sample';
   const typeKeywords = skill.typeKeywords?.join(', ') || 'Agent Skill';
   const accessLevel = skill.access || 'org';
+  const skillHubUrl = getSkillHubPublicUrl();
 
   return [
     'ARC_SKILL_INSTALL',
@@ -49,14 +51,23 @@ export function buildInstallPrompt(skill: Pick<Skill, 'access' | 'installUrl' | 
     `item_type=${escapeInstallValue(itemType)}`,
     `type_keywords=${escapeInstallValue(typeKeywords)}`,
     `access_level=${accessLevel}`,
+    `skill_hub_url=${skillHubUrl}`,
     'auth=oauth',
     'install_mode=agent_client_oauth',
     'END_ARC_SKILL_INSTALL',
     '',
-    'Install this ArcGIS skill using the client or agent runtime.',
-    'If ArcGIS Online authentication is required, open a browser OAuth login flow for the user.',
-    'After login succeeds, exchange the authorization result for a valid token, download the item package, inspect its contents, and install the skill locally.',
-    'Do not ask the user to paste a raw password into chat. Prefer the existing ArcGIS browser session, OAuth login, or a cached token handled by the client runtime.',
+    'To install this ArcGIS skill:',
+    '1. If access_level is "public", skip auth and download the item directly.',
+    '2. If access_level is "org", "shared", or "private":',
+    '   a. POST to {skill_hub_url}/api/auth/relay/sessions to create a login session.',
+    '      Response: { sessionId, authUrl }',
+    '   b. Tell the user: "Open this link to log in: {authUrl}"',
+    '   c. Poll GET {skill_hub_url}/api/auth/relay/sessions/{sessionId}/token every 3 seconds.',
+    '      202 = still waiting. 200 = token ready. 410 = expired or failed.',
+    '3. Download: GET {portal_url}/sharing/rest/content/items/{item_id}/data?token={accessToken}',
+    '4. Extract the zip and place the skill files in the appropriate local skill directory.',
+    '5. Confirm to the user that the skill has been installed.',
+    'Do not ask the user to paste tokens or passwords into chat.',
   ].join('\n');
 }
 
@@ -212,6 +223,26 @@ function cleanText(value?: string | null): string {
 
 function escapeInstallValue(value: string): string {
   return value.replace(/\r?\n+/g, ' ').trim();
+}
+
+function getSkillHubPublicUrl(): string {
+  const configuredUrl = process.env.SKILL_HUB_PUBLIC_URL?.trim();
+
+  if (!configuredUrl) {
+    return '';
+  }
+
+  try {
+    const url = new URL(configuredUrl);
+
+    if (!url.pathname || url.pathname === '/') {
+      url.pathname = APP_BASE_PATH;
+    }
+
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return configuredUrl.replace(/\/$/, '');
+  }
 }
 
 function containsAny(haystack: string, needles: string[]): boolean {

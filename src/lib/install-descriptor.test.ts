@@ -11,6 +11,7 @@ item_title=ArcGIS Skill Manager
 item_type=Code Sample
 type_keywords=Agent Skill, Code, Sample
 access_level=org
+skill_hub_url=https://example.com/skill-hub
 auth=oauth
 install_mode=agent_client_oauth
 END_ARC_SKILL_INSTALL`);
@@ -19,6 +20,7 @@ END_ARC_SKILL_INSTALL`);
     expect(descriptor.itemId).toBe('ba702393c4db4bdbacc8b3f2eb9c0449');
     expect(descriptor.typeKeywords).toEqual(['Agent Skill', 'Code', 'Sample']);
     expect(descriptor.auth).toBe('oauth');
+    expect(descriptor.skillHubUrl).toBe('https://example.com/skill-hub');
   });
 
   it('parses the older natural-language ArcGIS install prompt format', () => {
@@ -51,11 +53,13 @@ Access level: org`);
       accessLevel: 'org',
       item: 'abc123',
       portal: 'https://www.arcgis.com/',
+      skillHubUrl: 'https://relay.example.com/skill-hub',
       typeKeywords: 'Agent Skill',
     });
 
     expect(descriptor.portalUrl).toBe('https://www.arcgis.com');
     expect(descriptor.itemId).toBe('abc123');
     expect(descriptor.itemUrl).toBe('https://www.arcgis.com/home/item.html?id=abc123');
+    expect(descriptor.skillHubUrl).toBe('https://relay.example.com/skill-hub');
   });
 });

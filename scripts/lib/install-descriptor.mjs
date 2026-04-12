@@ -72,6 +72,7 @@ function tryParseInstallBlock(text) {
     itemType: record.item_type || 'Code Sample',
     itemUrl: record.item_url || '',
     portalUrl: normalizePortalUrl(record.portal_url || 'https://www.arcgis.com'),
+    skillHubUrl: record.skill_hub_url || '',
     typeKeywords: splitList(record.type_keywords),
   });
 }
@@ -90,6 +91,7 @@ export function buildDescriptorFromArgs(args) {
     itemType: args.itemType || 'Code Sample',
     itemUrl: args.itemUrl || `${normalizePortalUrl(args.portal || 'https://www.arcgis.com')}/home/item.html?id=${args.item}`,
     portalUrl: normalizePortalUrl(args.portal || 'https://www.arcgis.com'),
+    skillHubUrl: args.skillHubUrl || process.env.SKILL_HUB_URL || '',
     typeKeywords: splitList(args.typeKeywords || 'Agent Skill'),
   });
 }
@@ -119,6 +121,7 @@ function buildNormalizedDescriptor(input) {
     itemType: input.itemType || 'Code Sample',
     itemUrl: input.itemUrl || '',
     portalUrl: normalizePortalUrl(input.portalUrl || 'https://www.arcgis.com'),
+    skillHubUrl: input.skillHubUrl || '',
     typeKeywords: input.typeKeywords?.length ? input.typeKeywords : ['Agent Skill'],
   };
 }
@@ -145,6 +148,7 @@ function tryParseLegacyPrompt(text) {
     itemType: extractValue(text, /^Expected item type:\s*(.+)$/im) || extractValue(text, /^Type:\s*(.+)$/im) || 'Code Sample',
     itemUrl: normalizeLegacyItemUrl(resolvedUrl),
     portalUrl,
+    skillHubUrl: '',
     typeKeywords: splitList(extractValue(text, /^Expected type keywords:\s*(.+)$/im) || 'Agent Skill'),
   });
 }
@@ -171,6 +175,7 @@ function tryParseArcGISItemUrl(text) {
     itemType: 'Code Sample',
     itemUrl: `${portalUrl}/home/item.html?id=${itemId}`,
     portalUrl,
+    skillHubUrl: '',
     typeKeywords: ['Agent Skill'],
   });
 }

@@ -66,14 +66,28 @@ Optional for confidential OAuth clients:
 
 ```bash
 ARCGIS_OAUTH_CLIENT_SECRET=<your-oauth-client-secret>
+SKILL_HUB_PUBLIC_URL=http://localhost:3000/skill-hub
 ARCGIS_OAUTH_REDIRECT_URI=http://localhost:3000/skill-hub/api/auth/arcgis/callback
+
+# Optional: only if you want relay auth to use a dedicated callback URL.
+ARCGIS_RELAY_REDIRECT_URI=
 ```
 
 Notes:
 
 - `SKILL_HUB_SESSION_SECRET` is used to encrypt the Skill Hub session cookie.
+- `SKILL_HUB_PUBLIC_URL` should point at the public Skill Hub base URL, including `/skill-hub`.
 - If `ARCGIS_OAUTH_REDIRECT_URI` is not set, the app builds the callback URL from the current request origin plus `/skill-hub/api/auth/arcgis/callback`.
+- If `ARCGIS_RELAY_REDIRECT_URI` is not set, relay auth reuses `ARCGIS_OAUTH_REDIRECT_URI`. If neither is set, the app falls back to the current request origin in local development.
 - The OAuth app must allow `http://localhost:3000/skill-hub/api/auth/arcgis/callback` as a redirect URI for local development.
+- A second relay-specific callback URL is optional. It is only needed if you explicitly set `ARCGIS_RELAY_REDIRECT_URI`.
+
+With the current implementation, both of these ArcGIS app configurations are valid:
+
+- Production: `URL=https://earth-server.esri.com/skill-hub` with `Redirect URLs=https://earth-server.esri.com/skill-hub/api/auth/arcgis/callback`
+- Local development: `URL=http://localhost:3000/skill-hub` with `Redirect URLs=http://localhost:3000/skill-hub/api/auth/arcgis/callback`
+
+For agent relay installs, the important app setting is `SKILL_HUB_PUBLIC_URL`, because that value is embedded into the install prompt as `skill_hub_url`.
 
 ## Web Sign-In Behavior
 
@@ -101,14 +115,17 @@ Installer environment variables:
 ARCGIS_OAUTH_CLIENT_ID=<your-oauth-client-id>
 ARCGIS_OAUTH_CLIENT_SECRET=<optional-client-secret>
 ARCGIS_OAUTH_CALLBACK_PORT=8976
+SKILL_HUB_URL=http://localhost:3000/skill-hub
 ARCGIS_INSTALL_ROOT=~/.skillhub/skills
 ```
 
 The installer will:
 
+- Skip auth entirely for public skills
 - Reuse a cached ArcGIS token when available
 - Refresh the token when a refresh token exists
-- Open a browser OAuth flow when login is required
+- Use Skill Hub relay auth for agent_client_oauth installs when login is required
+- Fall back to the localhost browser OAuth flow for direct CLI login
 - Download the ArcGIS item package and extract zip archives
 - Write an install manifest to `.skillhub-install.json`
 

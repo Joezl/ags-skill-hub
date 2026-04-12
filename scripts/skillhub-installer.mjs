@@ -12,6 +12,9 @@ import { buildDescriptorFromArgs, parseInstallDescriptor, normalizePortalUrl } f
 
 const DEFAULT_PORTAL_URL = 'https://www.arcgis.com';
 const DEFAULT_CALLBACK_PORT = 8976;
+const DEFAULT_RELAY_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_RELAY_POLL_INTERVAL_MS = 3_000;
+const DEFAULT_SKILL_HUB_PATH = '/skill-hub';
 const TOKEN_EXPIRY_BUFFER_MS = 60_000;
 
 async function main() {
@@ -33,12 +36,13 @@ async function main() {
     const descriptor = {
       accessLevel: 'org',
       auth: 'oauth',
-      installMode: 'agent_client_oauth',
+      installMode: 'local_cli_oauth',
       itemId: 'login-only',
       itemTitle: '',
       itemType: 'Code Sample',
       itemUrl: '',
       portalUrl: normalizePortalUrl(args.portal || process.env.ARCGIS_PORTAL_URL || DEFAULT_PORTAL_URL),
+      skillHubUrl: '',
       typeKeywords: ['Agent Skill'],
     };
     const tokens = await getAuthorizedTokens(descriptor, args);
@@ -55,8 +59,8 @@ async function main() {
   }
 
   const descriptor = await resolveDescriptor(args);
-  const tokens = await getAuthorizedTokens(descriptor, args);
-  const metadata = await fetchItemMetadata(descriptor, tokens.accessToken);
+  const tokens = descriptor.accessLevel === 'public' ? null : await getAuthorizedTokens(descriptor, args);
+  const metadata = await fetchItemMetadata(descriptor, tokens?.accessToken || null);
   const installRoot = resolveInstallRoot(args, descriptor);
 
   if (existsSync(installRoot)) {
@@ -69,7 +73,7 @@ async function main() {
 
   mkdirSync(installRoot, { recursive: true });
 
-  const downloadPath = await downloadItemData(descriptor, tokens.accessToken, metadata, installRoot);
+  const downloadPath = await downloadItemData(descriptor, tokens?.accessToken || null, metadata, installRoot);
   const extracted = await extractOrCopyPackage(downloadPath, installRoot);
 
   const manifest = {
@@ -153,7 +157,10 @@ async function getAuthorizedTokens(descriptor, args) {
     }
   }
 
-  const fresh = await performOAuthLogin(descriptor.portalUrl, args);
+  const fresh = shouldUseRelayAuth(descriptor)
+    ? await performRelayOAuthLogin(descriptor, args)
+    : await performOAuthLogin(descriptor.portalUrl, args);
+
   writeTokenCache(cachePath, fresh);
   return fresh;
 }
@@ -177,8 +184,15 @@ function readTokenCache(cachePath) {
 }
 
 function writeTokenCache(cachePath, tokens) {
+  const existing = existsSync(cachePath) ? readTokenCache(cachePath) : null;
+  const nextTokens = {
+    ...tokens,
+    refreshToken: tokens.refreshToken || existing?.refreshToken || null,
+    username: tokens.username || existing?.username || null,
+  };
+
   mkdirSync(dirname(cachePath), { recursive: true });
-  writeFileSync(cachePath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+  writeFileSync(cachePath, JSON.stringify(nextTokens, null, 2), { mode: 0o600 });
 }
 
 async function refreshAccessToken(portalUrl, refreshToken, args) {
@@ -265,6 +279,79 @@ async function performOAuthLogin(portalUrl, args) {
   return normalizeTokenResponse(json);
 }
 
+async function performRelayOAuthLogin(descriptor, args) {
+  const skillHubUrl = resolveSkillHubUrl(descriptor, args);
+  const sessionResponse = await fetchJson(`${skillHubUrl}/api/auth/relay/sessions`, {
+    method: 'POST',
+  });
+
+  if (!sessionResponse?.sessionId || !sessionResponse?.authUrl) {
+    throw new Error('Skill Hub relay session response was incomplete.');
+  }
+
+  console.log('This skill requires ArcGIS authentication.');
+  console.log('Open the link below in your browser to log in, then return here:');
+  console.log('');
+  console.log(`  ${sessionResponse.authUrl}`);
+  console.log('');
+  console.log('Waiting for login...');
+
+  const deadline = Date.now() + DEFAULT_RELAY_TIMEOUT_MS;
+  let networkErrors = 0;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${skillHubUrl}/api/auth/relay/sessions/${sessionResponse.sessionId}/token`, {
+        cache: 'no-store',
+      });
+
+      if (response.status === 202) {
+        networkErrors = 0;
+        await delay(DEFAULT_RELAY_POLL_INTERVAL_MS);
+        continue;
+      }
+
+      if (response.status === 200) {
+        const json = await response.json();
+
+        console.log('Login successful. Downloading skill...');
+
+        return {
+          accessToken: json.accessToken,
+          expiresAt: json.tokenExpiresAt,
+          refreshToken: null,
+          username: null,
+        };
+      }
+
+      if (response.status === 410) {
+        throw new Error('Login session expired. Run the install again.');
+      }
+
+      if (response.status === 404) {
+        throw new Error('Login session was not found. Run the install again.');
+      }
+
+      const json = await safeReadJson(response);
+      throw new Error(json?.error || `Relay polling failed with status ${response.status}.`);
+    } catch (error) {
+      if (error instanceof Error && (error.message === 'Login session expired. Run the install again.' || error.message === 'Login session was not found. Run the install again.')) {
+        throw error;
+      }
+
+      networkErrors += 1;
+
+      if (networkErrors >= 3) {
+        throw new Error('Skill Hub relay polling failed repeatedly. Check network access and try again.');
+      }
+
+      await delay(DEFAULT_RELAY_POLL_INTERVAL_MS);
+    }
+  }
+
+  throw new Error('Login session expired. Run the install again.');
+}
+
 function waitForOAuthCallback(port, expectedState) {
   return new Promise((resolvePromise, rejectPromise) => {
     const server = createServer((request, response) => {
@@ -329,7 +416,10 @@ function normalizeTokenResponse(json, existingRefreshToken) {
 async function fetchItemMetadata(descriptor, accessToken) {
   const url = new URL(`${descriptor.portalUrl}/sharing/rest/content/items/${descriptor.itemId}`);
   url.searchParams.set('f', 'pjson');
-  url.searchParams.set('token', accessToken);
+
+  if (accessToken) {
+    url.searchParams.set('token', accessToken);
+  }
 
   const response = await fetch(url, { cache: 'no-store' });
   const json = await response.json();
@@ -347,7 +437,10 @@ async function downloadItemData(descriptor, accessToken, metadata, installRoot) 
   const archiveName = name.endsWith(extension) ? name : `${name}${extension}`;
   const downloadPath = join(installRoot, archiveName);
   const url = new URL(`${descriptor.portalUrl}/sharing/rest/content/items/${descriptor.itemId}/data`);
-  url.searchParams.set('token', accessToken);
+
+  if (accessToken) {
+    url.searchParams.set('token', accessToken);
+  }
 
   const response = await fetch(url, { cache: 'no-store' });
 
@@ -440,6 +533,58 @@ function getClientSecret(args) {
   return args.clientSecret || process.env.ARCGIS_OAUTH_CLIENT_SECRET || '';
 }
 
+function shouldUseRelayAuth(descriptor) {
+  return descriptor.installMode === 'agent_client_oauth' && descriptor.accessLevel !== 'public';
+}
+
+function resolveSkillHubUrl(descriptor, args) {
+  const configuredUrl = descriptor.skillHubUrl || args.skillHubUrl || process.env.SKILL_HUB_URL;
+
+  if (!configuredUrl) {
+    throw new Error('Missing Skill Hub URL. Set SKILL_HUB_URL, pass --skill-hub-url, or provide skill_hub_url in the install descriptor.');
+  }
+
+  return normalizeSkillHubUrl(configuredUrl);
+}
+
+function normalizeSkillHubUrl(value) {
+  const url = new URL(value);
+
+  if (!url.pathname || url.pathname === '/') {
+    url.pathname = DEFAULT_SKILL_HUB_PATH;
+  }
+
+  return url.toString().replace(/\/$/, '');
+}
+
+async function fetchJson(url, init) {
+  const response = await fetch(url, {
+    cache: 'no-store',
+    ...init,
+  });
+  const json = await safeReadJson(response);
+
+  if (!response.ok) {
+    throw new Error(json?.error || `Request failed with status ${response.status}.`);
+  }
+
+  return json;
+}
+
+async function safeReadJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolvePromise) => {
+    setTimeout(resolvePromise, ms);
+  });
+}
+
 async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) {
@@ -453,7 +598,7 @@ function camelCase(value) {
 }
 
 function printHelp() {
-  console.log(`skillhub-installer\n\nCommands:\n  install [--item <id> | --descriptor-file <path> | --stdin]\n  login [--portal <url>]\n  parse [--descriptor-file <path> | --stdin]\n\nOptions:\n  --portal <url>            ArcGIS portal URL (default: https://www.arcgis.com)\n  --client-id <id>          ArcGIS OAuth client id\n  --client-secret <secret>  Optional ArcGIS OAuth client secret\n  --callback-port <port>    Localhost callback port (default: 8976)\n  --target <dir>            Install root (default: ~/.skillhub/skills)\n  --force                   Replace an existing install target\n\nExamples:\n  pbpaste | node scripts/skillhub-installer.mjs install --stdin\n  node scripts/skillhub-installer.mjs install --item ba702393c4db4bdbacc8b3f2eb9c0449 --portal https://www.arcgis.com\n  node scripts/skillhub-installer.mjs login --portal https://www.arcgis.com`);
+  console.log(`skillhub-installer\n\nCommands:\n  install [--item <id> | --descriptor-file <path> | --stdin]\n  login [--portal <url>]\n  parse [--descriptor-file <path> | --stdin]\n\nOptions:\n  --portal <url>            ArcGIS portal URL (default: https://www.arcgis.com)\n  --client-id <id>          ArcGIS OAuth client id\n  --client-secret <secret>  Optional ArcGIS OAuth client secret\n  --callback-port <port>    Localhost callback port (default: 8976)\n  --skill-hub-url <url>     Public Skill Hub base URL for relay auth (default: $SKILL_HUB_URL)\n  --target <dir>            Install root (default: ~/.skillhub/skills)\n  --force                   Replace an existing install target\n\nExamples:\n  pbpaste | node scripts/skillhub-installer.mjs install --stdin\n  node scripts/skillhub-installer.mjs install --item ba702393c4db4bdbacc8b3f2eb9c0449 --portal https://www.arcgis.com\n  node scripts/skillhub-installer.mjs login --portal https://www.arcgis.com`);
 }
 
 main().catch((error) => {

@@ -34,6 +34,7 @@ describe('arcgis skill mapping', () => {
     expect(skill.installPrompt).toContain('ARC_SKILL_INSTALL');
     expect(skill.installPrompt).toContain('item_id=cc90bd067ddd4f24954f51bf67f7460b');
     expect(skill.installPrompt).toContain('auth=oauth');
+    expect(skill.installPrompt).toContain('skill_hub_url=');
   });
 
   it('prefers snippet when the description looks like structured markdown', () => {
@@ -63,7 +64,8 @@ describe('arcgis skill mapping', () => {
     expect(prompt).toContain('portal_url=https://www.arcgis.com');
     expect(prompt).toContain('access_level=org');
     expect(prompt).toContain('auth=oauth');
-    expect(prompt).toContain('open a browser OAuth login flow for the user');
+    expect(prompt).toContain('POST to {skill_hub_url}/api/auth/relay/sessions');
+    expect(prompt).toContain('Poll GET {skill_hub_url}/api/auth/relay/sessions/{sessionId}/token every 3 seconds');
   });
 
   it('infers a category from item content', () => {
